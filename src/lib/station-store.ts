@@ -6,9 +6,6 @@ export interface ForgetStoredStationDeps {
   persist(store: StoredStationStore): Promise<void>;
 }
 
-/** Forget a station in an order that cannot orphan retained legacy userinfo:
- * load/migrate first, delete the secure credential second, then hide the
- * public recent only after both operations succeeded. */
 export async function forgetStoredStation(
   rawUrl: string,
   deps: ForgetStoredStationDeps,

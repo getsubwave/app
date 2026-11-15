@@ -1,5 +1,3 @@
-// Only /health gates tune-in. The stepper is cosmetic; /dj supplies a name.
-
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -35,11 +33,8 @@ const STEPS = ['Resolving host', 'Controller · /health', 'Icecast · /stream', 
 type StepState = 'wait' | 'run' | 'ok' | 'fail';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stripProto = (u: string) => u.replace(/^https?:\/\//, '');
-// Bare host, lowercased. Hostnames and IPv4 only; IPv6 literals aren't handled.
 const hostOf = (u: string) => stripProto(u).split('/')[0].split(':')[0].toLowerCase();
-// Reserved TLDs identify LAN stations.
 const PRIVATE_TLDS = /\.(local|lan|home|internal|corp|intranet|localdomain)$|\.home\.arpa$/;
-// Local hosts skip cleartext consent; public-looking hosts require it.
 const isLocalHost = (h: string) =>
   h === 'localhost' ||
   !h.includes('.') ||
@@ -49,7 +44,6 @@ const isLocalHost = (h: string) =>
   /^192\.168\./.test(h) ||
   /^172\.(1[6-9]|2\d|3[01])\./.test(h);
 
-// Cleartext-warning / http-scheme accent. Mirrors HealthCheck's local copy.
 const DANGER = '#c5302a';
 
 // TLS "CA isn't trusted" failure, spelt differently per platform (Android:
@@ -65,18 +59,15 @@ function describeFail(
   if (!fail || fail.ok) return undefined;
   if (fail.kind === 'timeout')
     return 'No response in time — the box may be asleep, on another network, or blocked by a firewall.';
-  // 401 needs station credentials; generic proxy-routing advice is misleading.
   if (fail.kind === 'http' && fail.status === 401)
     return usedCredentials
       ? 'The station rejected this login (HTTP 401). Go back and check the username and password.'
       : 'The station asked for a login (HTTP 401). Go back, open Station login, and enter its username and password.';
-  // 407 needs proxy credentials, not station credentials.
   if (fail.kind === 'http' && fail.status === 407)
     return "A proxy on this network is asking for a password (HTTP 407) — that sits between this device and the station, so credentials in the station address never reach it. Check this network's proxy settings, or try another network.";
   if (fail.kind === 'http')
     return `The server answered with HTTP ${fail.status ?? '?'}, so the address is reachable but the request never reached the controller. Check that your reverse proxy routes /api/* to the controller on port 7701.`;
-  // A new root missing from an older trust store and a private CA cause the
-  // same error. User-installed CAs are supported by withAndroidUserCaTrust.js.
+  // A new root missing from an older trust store and a private CA cause the same error.
   if (isUntrustedCa(fail.message)) {
     const install =
       Platform.OS === 'ios'
@@ -110,7 +101,6 @@ export default function Onboarding() {
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
   const [insecure, setInsecure] = useState(false);
-  // An explicit scheme wins; bare hosts try HTTPS first, with HTTP fallback.
   const [scheme, setScheme] = useState<'https' | 'http'>('https');
   const [showLogin, setShowLogin] = useState(false);
   const [username, setUsername] = useState('');
@@ -163,7 +153,6 @@ export default function Onboarding() {
         base: first,
         url: stripProto(first),
         name: presetName || stripProto(first),
-        // undefined tells Retry to attempt the secure read again.
         credentials: undefined,
       });
       setSteps(['wait', 'fail', 'wait', 'wait']);
@@ -180,7 +169,6 @@ export default function Onboarding() {
     }
     if (runId.current !== id) return;
 
-    // Require explicit HTTP consent before any probe sends Basic credentials in cleartext.
     const candidates = stationProbeCandidates(trimmed, !!activeCredentials)
       .map((candidate) => normalizeBase(candidate))
       .filter(Boolean);
@@ -231,7 +219,6 @@ export default function Onboarding() {
       if (!alive()) return;
       set(0, 'ok');
 
-      // Only the controller health response gates tune-in.
       set(1, 'run');
       let api: StationApi | null = null;
       let base = first;
@@ -272,11 +259,9 @@ export default function Onboarding() {
         name: fallbackName,
         credentials: activeCredentials,
       });
-      // Require cleartext consent for public hosts, including explicit HTTP choices.
       setInsecure(base.startsWith('http://') && !isLocalHost(hostOf(base)));
       set(1, 'ok');
 
-      // This step is cosmetic; a healthy controller is assumed to have a live mount.
       set(2, 'run');
       await sleep(380);
       if (!alive()) return;
@@ -290,7 +275,6 @@ export default function Onboarding() {
         const dj = await api.dj(ctrl.signal);
         if (dj?.station || dj?.name) name = dj.station || dj.name || name;
       } catch {
-        /* booth name is best-effort */
       } finally {
         clearTimeout(timer);
       }
@@ -315,7 +299,6 @@ export default function Onboarding() {
         target.credentials,
       );
       if (addMode) {
-        // replace would stack another player inside the modal; unwind to the existing one.
         router.dismissTo('/');
       } else {
         router.replace('/');
@@ -346,8 +329,7 @@ export default function Onboarding() {
     if (autoRan.current || !params.url) return;
     autoRan.current = true;
     runCheck(params.url, params.name);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.url, params.name]);
+  }, [params.url, params.name, runCheck]);
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
@@ -446,8 +428,6 @@ export default function Onboarding() {
                 />
               ) : null}
 
-              {/* HTTPS is tried first for a bare public station; authenticated
-                  stations require an explicit HTTP choice before cleartext. */}
               <Text className="font-mono text-muted" style={{ fontSize: 10.5, lineHeight: 16 }}>
                 Tap the prefix to switch HTTPS / HTTP. Without a login, HTTPS auto-falls back to HTTP.
               </Text>

@@ -1,8 +1,3 @@
-// The station refused the saved Station login (#1873, useLoginCheck). Like
-// the private-station prompt it sits over a dimmed player, so the listener
-// cannot tune back into a stream that will only be refused, and offers the
-// way out: edit the login, check again, or leave for another station.
-
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -10,7 +5,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useTheme } from '@/theme/ThemeContext';
 
 export interface LoginRejectedProps {
-  /** The active station's saved base URL, for the edit screen. */
   base: string;
   stationName: string | null;
   recheck: () => Promise<void>;

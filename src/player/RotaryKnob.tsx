@@ -22,7 +22,6 @@ export default function RotaryKnob({ value, onChange, size = 44 }: RotaryKnobPro
   }, [value, onChange]);
   const startRef = useRef(value);
 
-  // PanResponder stores these callbacks; refs are read only during gestures.
   // eslint-disable-next-line react-hooks/refs
   const [pan] = useState(() =>
     PanResponder.create({

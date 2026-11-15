@@ -2,21 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { StationApi } from '@/lib/api';
 
 export interface TrackLike {
-  /** Likes are enabled on this station AND a likeable track is on air (jingles
-   *  and spoken segments carry no id). The UI hides the heart when false. */
   available: boolean;
-  /** This listener already liked the current airing (server-side dedup, no
-   *  account, keyed on a hash of the connection). */
   liked: boolean;
-  /** Total likes for the current song, all airings. */
   count: number;
   pending: boolean;
-  /** Like the current track. No-op while unavailable, pending, or liked. */
   like: () => Promise<void>;
 }
 
 export function useTrackLike(api: StationApi | null, songId: string | null): TrackLike {
-  // Start disabled so stations with likes off never flash the heart.
   const [enabled, setEnabled] = useState(false);
   const [state, setState] = useState<{ songId: string | null; liked: boolean; count: number }>({
     songId: null,
@@ -32,7 +25,6 @@ export function useTrackLike(api: StationApi | null, songId: string | null): Tra
     api.likeStatus().then((st) => {
       if (cancelled || !st) return;
       setEnabled(st.enabled !== false);
-      // Ignore status responses for a track that is no longer current.
       if (st.songId && st.songId !== songId) return;
       setState({ songId, liked: !!st.liked, count: st.count ?? 0 });
     });

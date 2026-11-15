@@ -1,9 +1,3 @@
-// This device's two lyrics choices, which never leave it: whether to show
-// lyrics at all (on by default), and its timing nudge. The nudge is one value
-// for every track and station, since a device's delay (Bluetooth, a car
-// stereo) is the same whatever is playing; a track's own mistiming is the
-// station's to fix. AsyncStorage hydration lands after the first frame.
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clampLyricOffsetMs } from './lyrics';
 
@@ -22,7 +16,6 @@ export async function saveLyricsShown(shown: boolean): Promise<void> {
   try {
     await AsyncStorage.setItem(SHOWN_KEY, shown ? '1' : '0');
   } catch {
-    /* non-fatal */
   }
 }
 
@@ -40,6 +33,5 @@ export async function saveLyricsDeviceOffset(offsetMs: number): Promise<void> {
     if (offsetMs === 0) await AsyncStorage.removeItem(DEVICE_OFFSET_KEY);
     else await AsyncStorage.setItem(DEVICE_OFFSET_KEY, String(offsetMs));
   } catch {
-    /* non-fatal */
   }
 }

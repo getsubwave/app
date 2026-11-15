@@ -10,13 +10,10 @@ import { useTheme } from '@/theme/ThemeContext';
 
 export interface BackPanelDrawerProps {
   castAvailable: boolean;
-  /** Cast device name while a session is active, else null. */
   castingTo: string | null;
   sleepActive: boolean;
   sleepRemainingSec: number | null;
   themeName: string | null;
-  /** Label of the current stream format pick, or null to hide the SIGNAL row
-   *  when there is nothing to choose. */
   formatLabel: string | null;
   onOpenSleep: () => void;
   onOpenThemes: () => void;

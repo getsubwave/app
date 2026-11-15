@@ -16,9 +16,6 @@ import { StreamRecovery } from '@/lib/stream-recovery';
 import type { StreamFormat } from '@/lib/streamFormat';
 import { loadVolumePref, saveVolumePref } from '@/lib/volume';
 
-// Every build keeps the line, redacted, in the playback log a listener can
-// share from the About sheet (#2140); dev builds print it as well. add() never
-// throws, so a log line can't cost playback (#2160).
 function plog(msg: string) {
   playbackLog.add(msg);
   if (__DEV__) console.log(`[player ${new Date().toISOString().slice(11, 23)}] ${msg}`);
@@ -40,8 +37,6 @@ export interface Player {
 export function usePlayer(
   api: StationApi | null,
   initialVolume = 1,
-  // From useConnectivity: a regained link reconnects immediately rather than
-  // waiting out the watchdog.
   isConnected: boolean | null = null,
   streamFormat: StreamFormat = 'mp3',
 ): Player {
@@ -59,10 +54,6 @@ export function usePlayer(
   useEffect(() => { formatRef.current = streamFormat; }, [streamFormat]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
-  // Every reload (tune-in, a remote Play, retune, watchdog, churn, error
-  // backoff, regained link) goes through this: one at a time, and an automatic
-  // one never over audio the native clock shows is still playing (#2114,
-  // #1936). The events below only report.
   const recoveryRef = useRef<StreamRecovery | null>(null);
   useEffect(() => {
     const recovery = new StreamRecovery({
@@ -84,13 +75,9 @@ export function usePlayer(
     };
   }, []);
 
-  // A Play from the lock screen, a headset, CarPlay or Bluetooth reaches
-  // service.ts, which hands it here while this hook is mounted (#2139): a
-  // tune-in through the recovery, with the current stream URL and login.
   useEffect(() => claimRemotePlay(() => {
     const recovery = recoveryRef.current;
     if (!apiRef.current || !recovery) return false;
-    // Flipped synchronously, so the coming Playing can't adopt it as foreign.
     tunedInRef.current = true;
     setTunedIn(true);
     setStatus('connecting');
@@ -104,9 +91,6 @@ export function usePlayer(
     TrackPlayer.setVolume(volume).catch(() => {});
   }, [volume]);
 
-  // Restore the last-used volume (#828). Persistence is gated on `hydrated` so
-  // the restoring setVolume can't race the persist effect and write the
-  // default back.
   const hydratedRef = useRef(false);
   useEffect(() => {
     let alive = true;
@@ -121,27 +105,21 @@ export function usePlayer(
     return () => { alive = false; };
   }, []);
 
-  // Debounced so a knob drag collapses to one write.
   useEffect(() => {
     if (!hydratedRef.current) return;
     const id = setTimeout(() => { void saveVolumePref(volume); }, 300);
     return () => clearTimeout(id);
   }, [volume]);
 
-  // Drive `status` from RNTP playback state, and report every event to the
-  // StreamRecovery. RemotePause/RemoteStop are handled here as well as in
+  // RemotePause/RemoteStop are handled here as well as in
   // service.ts: the Stopped/Ended state a lock-screen pause produces is
   // indistinguishable from a stream failure, so without this the error
-  // backoff reconnects 500ms later. RemoteDuck only tells the recovery an iOS
-  // interruption began or ended: iOS pauses the audio, RNTP resumes it
-  // (autoHandleInterruptions), and nothing here touches playback.
+  // backoff reconnects 500ms later.
   useTrackPlayerEvents(
     [Event.PlaybackState, Event.PlaybackError, Event.RemotePause, Event.RemoteStop, Event.RemoteDuck],
     (event) => {
       plog(playbackEventLine(event));
       if (event.type === Event.RemotePause || event.type === Event.RemoteStop) {
-        // A tune-out, not a failure. Both flip synchronously so the trailing
-        // Stopped event can't arm a reconnect before the re-render.
         recoveryRef.current?.tuneOut();
         tunedInRef.current = false;
         setTunedIn(false);
@@ -157,14 +135,9 @@ export function usePlayer(
         recoveryRef.current?.onError();
         return;
       }
-      // PlaybackState
       const state = event.state;
       if (state === State.Playing) {
         setStatus('playing');
-        // Audio this hook didn't start (service.ts reloaded it while the hook
-        // wasn't mounted, as after Android destroys the activity); re-adopt so
-        // the UI matches the audio. getLastLiveMeta() is null after an in-app
-        // stop, so a stale Playing event can't resurrect tunedIn.
         if (!tunedInRef.current && getLastLiveMeta()) {
           tunedInRef.current = true;
           setTunedIn(true);
@@ -173,10 +146,6 @@ export function usePlayer(
       } else if (state === State.Buffering || state === State.Loading) {
         setStatus((s) => (s === 'playing' ? 'connecting' : s));
       } else if (state === State.Ended || state === State.Stopped || state === State.Error) {
-        // A dead item, as PlaybackError says above: an `ended` brings no
-        // PlaybackError, and an item that played waits up to PLAYED_MAX_MS for
-        // its reload, so without this the UI says playing over that silence
-        // and a regained link (gated on status below) never fires.
         if (tunedInRef.current) setStatus((s) => (s === 'playing' ? 'connecting' : s));
       }
       recoveryRef.current?.onState(state);
@@ -193,21 +162,16 @@ export function usePlayer(
     const sub = addAudioRouteChangeListener((e) => {
       plog(`route change reason=${e.reason} outputs=${e.outputs}`);
       if (e.reason !== ROUTE_REASON_OLD_DEVICE_UNAVAILABLE || !tunedInRef.current) return;
-      // Same synchronous flip as the RemotePause handler above.
       recoveryRef.current?.tuneOut();
       tunedInRef.current = false;
       setTunedIn(false);
       setStatus('idle');
       // stop(), not pause: unloads the item so the Icecast connection drops.
-      // lastLiveMeta survives (only teardown clears it) so a later remote
-      // Play resumes at the live edge (src/lib/remote-play.ts).
       TrackPlayer.stop().catch(() => {});
     });
     return () => sub?.remove();
   }, []);
 
-  // Keyed on the false → true transition so a steady-state `true` never fires
-  // it. The watchdog still covers stream-side deaths where the link held.
   const prevConnectedRef = useRef(isConnected);
   useEffect(() => {
     const prev = prevConnectedRef.current;
@@ -224,10 +188,6 @@ export function usePlayer(
     teardown().catch(() => {});
   }, []);
 
-  // On a station switch selectStation has already torn the stream down at the
-  // RNTP level; drop local tuned-in state so the UI doesn't claim "on air"
-  // over dead audio. (The event handler ignores State.None because reset()
-  // also fires it mid tune-in and mid reconnect.)
   const prevBaseRef = useRef(api?.base ?? null);
   useEffect(() => {
     const nextBase = api?.base ?? null;
@@ -236,8 +196,6 @@ export function usePlayer(
     if (tunedInRef.current) stop();
   }, [api, stop]);
 
-  // Retune onto a new mount in place. Keyed on the transition so a steady
-  // value never reloads the stream.
   const prevFormatRef = useRef(streamFormat);
   useEffect(() => {
     if (prevFormatRef.current === streamFormat) return;

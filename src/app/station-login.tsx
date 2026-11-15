@@ -1,10 +1,3 @@
-// Edit a saved station's login (#1873): the HTTP Basic Auth pair a reverse
-// proxy may ask for, never SUB/WAVE's own station password (#478), which this
-// screen can only forget. A changed login is checked with the station first
-// (checkStationLogin): one a proxy refuses is never saved, and one the stream
-// password refused or that could not be checked is saved only on "Save
-// anyway" (saveAnywayOffered).
-
 import { router, useLocalSearchParams } from 'expo-router';
 import { KeyRound, X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
@@ -34,8 +27,6 @@ const OUTCOME_COPY: Record<string, string> = {
   proxy: 'The station refused this login, so it was not saved. Check the username and password.',
   'stream-password':
     "The station's password check refused this password, so nothing was saved. A proxy that guards only the stream may still want this login, and the app can't check that: if you're sure it's right, save it anyway.",
-  // Also a station that answered, but with something that says nothing about
-  // the login (a 403, a 401 with no Basic challenge), so never "couldn't reach".
   unreachable: "Couldn't check this login with the station. Save it anyway, or try again later.",
   'rate-limited':
     'The station is limiting password checks right now, so this login could not be checked. Save it anyway, or wait a few minutes and try again.',
@@ -101,14 +92,10 @@ export default function StationLogin() {
     };
   }, [base, credentialsFor, stationPasswordSaved]);
 
-  // Same rule as adding a station: two empty fields are no login.
   const draft: StationCredentials | null = username || password ? { username, password } : null;
   const canSave = loaded === 'ready' && !!draft && !sameLogin(draft, saved) && !busy;
 
   const close = () => (router.canGoBack() ? router.back() : router.replace('/'));
-  // Closing the screen mid-check cancels the save: a late verdict must neither
-  // save a login the listener walked away from nor close whatever screen is on
-  // top by then (the Stations list, or the player itself).
   const openRef = useRef(true);
   useEffect(() => {
     openRef.current = true;
@@ -119,7 +106,6 @@ export default function StationLogin() {
 
   const edit = (setter: (value: string) => void) => (value: string) => {
     setter(value);
-    // "Save anyway" answers for the login that was checked, not an edited one.
     setOutcome(null);
     setError(undefined);
   };
@@ -148,7 +134,6 @@ export default function StationLogin() {
     if (!canSave || !draft) return;
     setError(undefined);
     setOutcome(null);
-    // The check itself sends the login, so ask before it goes out in cleartext.
     if (base.startsWith('http://') && !(await confirmCleartextLogin())) return;
     setBusy(true);
     const api = createApi(base, draft);

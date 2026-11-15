@@ -1,5 +1,3 @@
-// System turns are operator-only, except listener show-boundary separators (#1690).
-
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import {
@@ -25,10 +23,7 @@ const FILTERS: { id: FilterId; label: string }[] = [
 
 export interface BoothDrawerProps {
   items: SessionTurn[];
-  /** Station IANA timezone, so stamps match what the DJ speaks (#418). Falls
-   *  back to the device zone. */
   timezone?: string | null;
-  /** Station display locale — 24h (en-GB) vs AM/PM (en-US) timestamps (#475). */
   locale?: StationLocale | null;
 }
 
@@ -114,7 +109,6 @@ export default function BoothDrawer({ items, timezone, locale }: BoothDrawerProp
           <View
             key={turnKey(turn, i)}
             style={{
-              // The previous show's carried tail is dimmed (#1690).
               opacity: isCarriedTurn(turn) ? 0.6 : 1,
               paddingVertical: 12,
               borderBottomWidth: 1,

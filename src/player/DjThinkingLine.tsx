@@ -9,14 +9,12 @@ const MARKER: Record<string, string> = { voice: '♪', dj: '◇' };
 export interface DjThinkingLineProps {
   feed: SessionTurn[] | undefined;
   enabled: boolean;
-  // Pick turns refer to the NEXT song; filter other track ids (#546).
   currentTrackId?: string | null;
   onOpenBooth: () => void;
 }
 
 export default function DjThinkingLine({ feed, enabled, currentTrackId = null, onOpenBooth }: DjThinkingLineProps) {
   const { colors } = useTheme();
-  // This column has no overflow clip; limit the teaser to protect the waveform (#576).
   const { height } = useWindowDimensions();
   const maxLines = height >= 760 ? 6 : 3;
   const latest = useMemo<SessionTurn | null>(

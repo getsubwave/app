@@ -6,7 +6,6 @@ import { useTheme } from '@/theme/ThemeContext';
 
 export interface FormatDrawerProps {
   options: StreamFormatOption[];
-  /** The listener's raw pick (what reads as selected). */
   selected: StreamFormat;
   onSelect: (format: StreamFormat) => void;
 }

@@ -1,8 +1,4 @@
-// Listeners who like the radio are the people most likely to want their own,
-// so this is the app's one pointer at running a station. Links go out through
-// lib/links, which is also why nothing here asks for money. It is also where a
-// listener asked for a playback log finds one to share (#2140): the share
-// sheet offers Copy on iOS and on Android 10+, and older Android hands it to a
+// The share sheet offers Copy on iOS and on Android 10+, and older Android hands it to a
 // mail or notes app, so the app needs no clipboard module.
 
 import Constants from 'expo-constants';

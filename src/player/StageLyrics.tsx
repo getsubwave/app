@@ -1,17 +1,3 @@
-// The Live page's lyrics, the app's port of the Classic skin's
-// (web/components/skins/classic/AmbientLyrics.tsx) in its phone layout: the
-// track info shrinks to one row (CenterStage's compact form) and the lyrics
-// fill everything between it and the waveform.
-//
-// Synced lines are one column that glides so the line being sung holds the
-// centre, a fifth larger, while the lines around it fade, those already sung
-// more than those to come. Words light up as they are sung, the newest in the
-// accent, paced by lyricMoment() (LRC times lines, not words). An intro or an
-// instrumental break centres the line to come, at rest. Untimed lyrics take
-// the same place, every line at rest, to scroll by hand. Motion is transform
-// and opacity on the native driver, so no line ever reflows; under Reduce
-// Motion both cut.
-//
 // RN has no mask-image, and a colour overlay would not match the cover tint
 // behind the page, so the column's top and bottom fade is each line's own
 // opacity, falling off with its distance from the centre.
@@ -33,30 +19,21 @@ import { useTheme } from '@/theme/ThemeContext';
 
 const EASE = Easing.bezier(0.3, 0.7, 0.2, 1);
 
-// Four steps a second is enough for word-by-word lighting (the web's tick).
 const TICK_MS = 250;
 
-// The sung line grows by GROW from its left edge, so every line wraps at
-// 1/GROW of the column and the grown one still fits.
 const GROW = 1.2;
 const LINE_WIDTH = `${Math.floor(100 / GROW)}%` as const;
 
-// The display face by name, for the inline styles both columns share.
 const FONT_FAMILY = 'Fraunces_600SemiBold';
 const FONT_SIZE = 19;
 // A little looser than the web's 1.05, to leave the display face's ascenders
-// room in RN's exact line box. Check on a device before tightening it.
+// room in RN's exact line box.
 const LINE_HEIGHT = 23;
-// Synced lines stand apart, one moment each; untimed ones sit closer, read
-// as a page.
 const SYNCED_GAP = 8;
 const PLAIN_GAP = 4;
 
-// Lines already sung fade further than those to come.
 const PAST = 0.28;
 const AHEAD = 0.45;
-// The share of the column's half-height, either side of the centre, that is
-// fully opaque before lines fade out toward the edge (the web's 22%/78% mask).
 const CLEAR = 0.56;
 
 function useReduceMotion(): boolean {
@@ -77,8 +54,6 @@ function useReduceMotion(): boolean {
   return reduce;
 }
 
-/** The sung line's words: the first `lit` lit, and while the line is still
- *  being sung (`accentNewest`) the newest of them in the accent. */
 function Words({ text, lit, accentNewest }: { text: string; lit: number; accentNewest: boolean }) {
   const { colors } = useTheme();
   // Nested Text takes no opacity, and a theme colour may be rgb(), so unsung
@@ -101,7 +76,6 @@ function Words({ text, lit, accentNewest }: { text: string; lit: number; accentN
 
 type Tone = 'past' | 'sung' | 'ahead';
 
-/** One line of the column. Memoized: on each tick only the sung line changes. */
 const Line = memo(function Line({
   index,
   text,
@@ -117,7 +91,6 @@ const Line = memo(function Line({
   tone: Tone;
   lit: number;
   accentNewest: boolean;
-  /** 0 to 1: how far inside the column's clear middle the line sits. */
   fade: number;
   reduceMotion: boolean;
   onMeasure: (index: number, centre: number) => void;
@@ -151,8 +124,7 @@ const Line = memo(function Line({
   // turn from a string into elements (the line becoming the sung one) remounts
   // its native view, since RN wraps only element children in a text-ancestor
   // context, and Android's native driver throws when the props node, still
-  // attached to the old view, is connected to the new one. The padding is
-  // even, so scaling the wrapper from its left centre is scaling the text.
+  // attached to the old view, is connected to the new one.
   return (
     <Animated.View
       onLayout={onLayout}
@@ -178,7 +150,6 @@ const Line = memo(function Line({
   );
 });
 
-/** Synced lyrics: the column glides to keep the line in focus at its centre. */
 function SyncedColumn({
   lyrics,
   positionMs,
@@ -201,10 +172,6 @@ function SyncedColumn({
     setHeight((prev) => (Math.abs(prev - h) > 0.5 ? h : prev));
   };
 
-  // Each line's centre within the column, measured, so a line of any length
-  // can take the centre. Scale never changes layout, so these hold until the
-  // column's width changes; new lines remount the column (StageLyrics keys
-  // it).
   const [centres, setCentres] = useState<number[]>([]);
   const pending = useRef<number[]>([]);
   const onMeasure = useCallback((index: number, centre: number) => {
@@ -219,7 +186,6 @@ function SyncedColumn({
   const target = -(centres[focus] ?? 0);
   useEffect(() => {
     if (!measured) return;
-    // The first placement is a cut, not a glide in from the top.
     if (!placed.current || reduceMotion) {
       placed.current = true;
       y.setValue(target);
@@ -279,7 +245,6 @@ function SyncedColumn({
   );
 }
 
-/** Untimed lyrics: every line, closer set and readable, to scroll by hand. */
 function PlainColumn({ lines }: { lines: { text: string }[] }) {
   const { colors } = useTheme();
   return (
@@ -314,10 +279,8 @@ function PlainColumn({ lines }: { lines: { text: string }[] }) {
 }
 
 export interface StageLyricsProps {
-  /** PlayerScreen's one answer for this track (useTrackLyrics). */
   track: TrackLyrics;
   trackStartedAt: number | null;
-  /** The Live page is on screen and the app in the foreground. */
   running: boolean;
 }
 
@@ -332,8 +295,6 @@ export default memo(function StageLyrics({ track, trackStartedAt, running }: Sta
     <View style={{ flex: 1, paddingHorizontal: 20, marginTop: 8, marginBottom: 12 }}>
       {lyrics && lines.length > 0 ? (
         synced ? (
-          // Keyed by track and its lines: a new song fades in, placed at its
-          // own start, and is measured afresh.
           <SyncedColumn
             key={`${lyrics.songId ?? ''}:${lines.length}`}
             lyrics={lyrics}

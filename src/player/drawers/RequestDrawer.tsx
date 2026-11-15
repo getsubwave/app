@@ -84,7 +84,6 @@ export default function RequestDrawer({ api, nowPlaying, context, onClose }: Req
   const scheduleClose = () => {
     if (closeTimer.current) return;
     closeTimer.current = setTimeout(() => {
-      // This page stays mounted. Clear the timer ref so later requests can close it.
       closeTimer.current = null;
       onClose();
       setTimeout(() => setResult(null), 300);

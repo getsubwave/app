@@ -61,8 +61,6 @@ export default function TimelineDrawer({ upcoming, history }: TimelineDrawerProp
         <View>
           <SectionLabel>Played</SectionLabel>
           {history!.map((t, i) => {
-            // Live-edge, like the web skins' history clocks: the listener's
-            // ~22s buffer is below this label's resolution.
             const at = playedAt(t);
             return (
               <View

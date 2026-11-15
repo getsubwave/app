@@ -57,8 +57,6 @@ export function createCredentialVault(storage: CredentialStorage): CredentialVau
     async merge(credentials) {
       if (!Object.keys(credentials).length) return;
       const values = await read();
-      // A credential already saved in secure storage is newer and more
-      // authoritative than a legacy URL being migrated from AsyncStorage.
       await write({ ...credentials, ...values });
     },
   };

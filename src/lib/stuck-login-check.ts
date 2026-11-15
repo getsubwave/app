@@ -1,25 +1,6 @@
-// Asking again about a saved Station login while the player is stuck
-// connecting (#1873). The stream cannot say why it will not start, so
-// useLoginCheck asks /api/health with the saved login, which only a proxy in
-// front of the station can refuse (loginRefused).
-//
-// One answer does not settle it. A check that lands while the phone is still
-// offline or on a weak link (a timeout, a network error), or while something
-// in front of the proxy fails (a tunnel's 502 as the origin restarts), says
-// nothing about the login; and one that passes says only that the login was
-// good when asked, while the stall it was asked in can outlast a password
-// change. So every answer but a refusal asks again, as long as the player
-// stays stuck, spaced by RECHECK_MIN_GAP_MS.
-
 import type { HealthResult } from './api';
 import { loginRefused } from './station-login';
 
-// Sooner than useStationGate's 15 s stuck recheck: a proxy that refuses the
-// login refuses /station-auth too (stationAuthResult reads its challenge as
-// 'unavailable', not a wrong password), so stopping first clears the gate's
-// timer and saves it a rate-limited attempt that cannot get through. A health
-// check costs no rate limit; the gap keeps a long stall to one check per 30 s,
-// a fraction of what the feed polls cost.
 export const STUCK_RECHECK_MS = 8_000;
 export const RECHECK_MIN_GAP_MS = 30_000;
 

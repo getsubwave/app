@@ -1,6 +1,3 @@
-// The runtime station base is the site root, with /api and stream mounts
-// on the same origin (docker/Caddyfile).
-
 import { lyricsResultFor, type LyricsResult } from './lyrics';
 import type { StreamFormat } from './streamFormat';
 import { rateLimitedUntil, stationAuthResult, withStreamAuth, type StationAuthResult } from './station-password';
@@ -127,7 +124,6 @@ export function loginHeaders(
   return authorization ? { ...headers, Authorization: authorization } : headers;
 }
 
-/** Icecast mount path, matching the Liquidsoap outputs and the Caddy routes. */
 function mountFor(format: StreamFormat): string {
   return `/stream.${format}`;
 }
@@ -135,8 +131,6 @@ function mountFor(format: StreamFormat): string {
 // Compose timeouts manually: RN fetch lacks AbortSignal.timeout and any.
 export const FETCH_TIMEOUT_MS = 8000;
 
-/** What can still end a request past its headers, for readJson: fetch resolves
- *  on them, and fetchWithTimeout lets go of its timer and the caller's signal. */
 const openRequests = new WeakMap<Response, { ctrl: AbortController; outer?: AbortSignal | null }>();
 
 export function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
@@ -189,9 +183,6 @@ export async function readJson(res: Response, timeoutMs = FETCH_TIMEOUT_MS): Pro
   }
 }
 
-/** A JSON body, or undefined when it is not JSON or has not arrived in time
- *  (readJson), for an answer that makes its own sense of a missing body:
- *  stationAuthResult and lyricsResultFor. */
 function readJsonOrUndefined(res: Response): Promise<unknown> {
   return readJson(res).catch(() => undefined);
 }
@@ -204,9 +195,6 @@ export function createApi(
   stationPassword: () => string | null = () => null,
 ): StationApi {
   const connection = resolveStationConnection(rawBase, credentials);
-  // Persist credential-free bases (#1300). Requests go to the clean base with
-  // the login as a header, as the stream does (#764): the two login checks
-  // then send exactly what the player sends (#1873).
   const { base: cleanBase, requestBase, authorization } = connection;
   const authHeaders = loginHeaders(authorization);
   const api = (p: string) => `${cleanBase}/api${p}`;
@@ -217,9 +205,6 @@ export function createApi(
     if (!res.ok) throw new Error(`${res.status} ${api(p)}`);
     return (await readJson(res)) as T;
   };
-  // Images keep the login in the URL as well, for the one loader that takes
-  // no headers (see cover()). It is the same login as the header, so the two
-  // never disagree.
   const asset = (p: string) => `${requestBase}/api${p}`;
   let stationAuthHold = 0;
   const onStation = (url: string) => url.startsWith(`${requestBase}/`) || url.startsWith(`${cleanBase}/`);
@@ -243,7 +228,6 @@ export function createApi(
     schedule: (signal) => getJson<SchedulePayload>('/schedule', signal),
     dj: (signal) => getJson<DjPublic>('/dj', signal),
     themes: (signal) => getJson<ThemesPayload>('/themes', signal),
-    // useSignal relies on network/TLS/timeout errors throwing; HTTP failures return false.
     health: async (signal) => {
       const r = await probeHealth(signal);
       if (r.ok) return true;
@@ -264,9 +248,7 @@ export function createApi(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-      } catch {
-        /* best-effort analytics */
-      }
+      } catch {}
     },
     checkStationAuth: async (password) => {
       try {
@@ -278,7 +260,6 @@ export function createApi(
         stationAuthHold = res.status === 429 ? rateLimitedUntil(res.headers.get('Retry-After'), Date.now()) : 0;
         return stationAuthResult(res.status, {
           challenged: res.headers.has('www-authenticate'),
-          // Only these bodies are read: they say who answered (stationAuthResult).
           body: res.status === 200 || res.status === 401 ? await readJsonOrUndefined(res) : undefined,
         });
       } catch {

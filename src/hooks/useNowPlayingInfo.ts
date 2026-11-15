@@ -1,6 +1,3 @@
-// Talking state and card contents come from lib/voice-turn and lib/air-card,
-// shared with the Live Activity.
-
 import { useEffect, useRef, useState } from 'react';
 import TrackPlayer, { Event, useTrackPlayerEvents } from 'react-native-track-player';
 import { useAppActive } from '@/hooks/useAppActive';
@@ -18,9 +15,7 @@ export interface UseNowPlayingInfoParams {
   status: PlayerStatus;
   nowPlaying: NowPlayingTrack | null;
   boothFeed?: SessionTurn[];
-  /** Listener buffer behind the live edge (useStationFeed.leadMs). */
   leadMs: number;
-  /** Listener-time start shared with the player and Live Activity. */
   trackStartedAt: number | null;
   activeShow?: ActiveShow | null;
 }
@@ -39,14 +34,13 @@ export function useNowPlayingInfo({
   const appActive = useAppActive();
   const card = api ? resolveAirCard({ api, nowPlaying, activeShow, talking }) : null;
 
-  // Use resolved strings as dependencies to avoid flickering artwork on unchanged polls.
   const title = card?.title;
   const artist = card?.artist;
   const album = card?.album;
   const artwork = card?.artworkUrl;
   const duration = nowPlaying?.duration;
 
-  // A loaded item resets the native card, so each one gets the card again.
+  // A loaded item resets the native card.
   const [item, setItem] = useState(0);
   useTrackPlayerEvents([Event.PlaybackActiveTrackChanged], () => setItem((n) => n + 1));
   const sentRef = useRef<SentCard | null>(null);
@@ -71,10 +65,8 @@ export function useNowPlayingInfo({
         /* no active track yet */
       });
     };
-    // Card or not, every refresh re-anchors progress (lib/now-playing-card).
     update(withCard);
-    // Native playback state extrapolates between updates. Re-anchor from the
-    // absolute listener clock even while the foreground elapsed timer sleeps.
+    // Native playback state extrapolates between updates.
     const timer = setInterval(() => update(false), 30000);
     return () => clearInterval(timer);
   }, [api, tunedIn, status, title, artist, album, artwork, duration, trackStartedAt, talking, appActive, item]);

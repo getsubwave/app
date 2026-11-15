@@ -7,9 +7,7 @@ export interface PagePanelProps {
   title: string;
   sub?: string;
   children: ReactNode;
-  /** Measured header height; defaults to the safe-area top. */
   topInset?: number;
-  /** Measured transport height; defaults to the safe-area bottom. */
   bottomInset?: number;
 }
 

@@ -1,6 +1,3 @@
-// Gate cosmetic work on active; audio continues in the background.
-// iOS also pauses this work during transient inactive states.
-
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 

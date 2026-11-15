@@ -1,11 +1,7 @@
-// AsyncStorage hydration applies the saved volume after the first frame.
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEY = 'subwave.volume.v1';
 
-/** Read the stored volume (0..1), or null when nothing valid is stored so the
- *  caller can keep its own default. */
 export async function loadVolumePref(): Promise<number | null> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -18,12 +14,10 @@ export async function loadVolumePref(): Promise<number | null> {
   }
 }
 
-/** Persist the volume (clamped 0..1). Failures are swallowed. */
 export async function saveVolumePref(volume: number): Promise<void> {
   try {
     const v = Math.min(1, Math.max(0, volume));
     await AsyncStorage.setItem(STORAGE_KEY, String(v));
   } catch {
-    /* non-fatal */
   }
 }

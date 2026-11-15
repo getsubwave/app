@@ -1,6 +1,3 @@
-// The stored preference is gated on platform support and advertised mounts.
-// Disabled mounts fall back to MP3 on the next reconnect.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   availableFormats,
@@ -13,12 +10,8 @@ import {
 import type { StreamInfo } from '@/lib/types';
 
 export interface StreamFormatControl {
-  /** Feed-validated format for the player to tune with. */
   format: StreamFormat;
-  /** The listener's raw pick, shown as selected in the drawer. */
   preference: StreamFormat;
-  /** Formats pickable right now (platform-decodable AND station-enabled).
-   *  Always includes MP3; length 1 means there is nothing to choose. */
   options: StreamFormatOption[];
   setFormat: (f: StreamFormat) => void;
 }
@@ -29,8 +22,6 @@ export function useStreamFormat(
 ): StreamFormatControl {
   const [preference, setPreference] = useState<StreamFormat>('mp3');
 
-  // On switch, reset to the default first so station B never briefly tunes
-  // with station A's preference.
   const baseRef = useRef(base);
   useEffect(() => {
     baseRef.current = base;

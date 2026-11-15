@@ -26,7 +26,7 @@ export default function StationLiveStatus({ url }: { url: string }) {
       try {
         const np = await (await client).nowPlaying(ctrl.signal);
         if (!alive) return;
-        const online = np.streamOnline !== false; // absent → assume up (controller answered)
+        const online = np.streamOnline !== false;
         const t = np.nowPlaying;
         const track = t ? [t.artist, t.title].filter(Boolean).join(' — ') : undefined;
         setLive({ online, track: track || undefined });

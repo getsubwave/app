@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 
-/** True while `shown`, and for `holdMs` after it stops; never before it has
- *  started. The Live page holds its lyrics layout this way (with
- *  LYRICS_LAYOUT_HOLD_MS) through the moment between two tracks that both
- *  have lyrics. */
 export function useLingeringPresence(shown: boolean, holdMs: number): boolean {
   const [lingering, setLingering] = useState(false);
   const wasShown = useRef(shown);
