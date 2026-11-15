@@ -5,6 +5,7 @@ import TrackPlayer, {
   type PlayerOptions,
   RatingType,
 } from 'react-native-track-player';
+import { playbackLog } from '@/lib/playback-log';
 
 const STREAM_TRACK_ID = 'subwave-live';
 
@@ -89,5 +90,9 @@ export async function teardown(): Promise<void> {
   lastLiveMeta = null;
   try {
     await TrackPlayer.reset();
-  } catch {}
+  } catch (e) {
+    if ((e as { code?: unknown } | null)?.code !== 'player_not_initialized') {
+      playbackLog.add(`teardown reset failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 }

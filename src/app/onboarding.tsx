@@ -26,6 +26,7 @@ import {
   stationProbeCandidates,
   type StationCredentials,
 } from '@/lib/station-credentials';
+import { isInsecureBase } from '@/lib/insecure-base';
 import { useTheme } from '@/theme/ThemeContext';
 
 const PROBE_TIMEOUT_MS = 4500;
@@ -33,17 +34,6 @@ const STEPS = ['Resolving host', 'Controller · /health', 'Icecast · /stream', 
 type StepState = 'wait' | 'run' | 'ok' | 'fail';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stripProto = (u: string) => u.replace(/^https?:\/\//, '');
-const hostOf = (u: string) => stripProto(u).split('/')[0].split(':')[0].toLowerCase();
-const PRIVATE_TLDS = /\.(local|lan|home|internal|corp|intranet|localdomain)$|\.home\.arpa$/;
-const isLocalHost = (h: string) =>
-  h === 'localhost' ||
-  !h.includes('.') ||
-  PRIVATE_TLDS.test(h) ||
-  /^127\./.test(h) ||
-  /^10\./.test(h) ||
-  /^192\.168\./.test(h) ||
-  /^172\.(1[6-9]|2\d|3[01])\./.test(h);
-
 const DANGER = '#c5302a';
 
 // TLS "CA isn't trusted" failure, spelt differently per platform (Android:
@@ -259,7 +249,7 @@ export default function Onboarding() {
         name: fallbackName,
         credentials: activeCredentials,
       });
-      setInsecure(base.startsWith('http://') && !isLocalHost(hostOf(base)));
+      setInsecure(isInsecureBase(base));
       set(1, 'ok');
 
       set(2, 'run');
