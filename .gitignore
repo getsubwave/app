@@ -48,3 +48,4 @@ secrets/
 
 # native module build output
 modules/*/android/build/
+targets/*/Info.plist
