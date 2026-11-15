@@ -25,12 +25,13 @@ import {
   type TrackAnswer,
 } from '../src/lib/lyrics.ts';
 import type { PublicLyricsPayload } from '../src/lib/types.ts';
+import { readStation, stationSkip } from './station-repo.ts';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const APP = read('../src/lib/lyrics.ts');
-const WEB = read('../../web/components/skins/lyrics.ts');
-const CLIENT = read('../../web/lib/stationClient.ts');
-const SCHEMA = read('../../controller/src/schemas/lyrics.ts');
+const WEB = readStation('web/components/skins/lyrics.ts');
+const CLIENT = readStation('web/lib/stationClient.ts');
+const SCHEMA = readStation('controller/src/schemas/lyrics.ts');
 
 /** The source from `from` (a `{` or `(`) to its match, comments stripped and
  *  whitespace collapsed, so only the code is compared. */
@@ -262,7 +263,7 @@ test('lyrics already showing stay up through a failed recheck, no longer claimin
 // (see its header). A failure here means one side moved: carry the change
 // across, then update the expectation.
 
-test('the shared pure functions keep the web player’s bodies', () => {
+test('the shared pure functions keep the web player’s bodies', { skip: stationSkip }, () => {
   for (const name of [
     'syncedLyricsReady',
     'plainLyricsReady',
@@ -278,7 +279,7 @@ test('the shared pure functions keep the web player’s bodies', () => {
   }
 });
 
-test('the shared timings and steps keep the web player’s values', () => {
+test('the shared timings and steps keep the web player’s values', { skip: stationSkip }, () => {
   for (const name of [
     'LYRIC_OFFSET_STEP_MS',
     'LYRIC_OFFSET_NUDGE_MS',
@@ -294,10 +295,10 @@ test('the shared timings and steps keep the web player’s values', () => {
   ]) {
     assert.equal(constant(APP, name), constant(WEB, name), `${name} differs from web/components/skins/lyrics.ts`);
   }
-  assert.equal(constant(read('../src/player/StageLyrics.tsx'), 'TICK_MS'), constant(read('../../web/components/skins/classic/AmbientLyrics.tsx'), 'TICK_MS'));
+  assert.equal(constant(read('../src/player/StageLyrics.tsx'), 'TICK_MS'), constant(readStation('web/components/skins/classic/AmbientLyrics.tsx'), 'TICK_MS'));
 });
 
-test('each status maps to the result the web player maps it to', () => {
+test('each status maps to the result the web player maps it to', { skip: stationSkip }, () => {
   const start = CLIENT.indexOf('currentLyrics:');
   const block = CLIENT.slice(start, CLIENT.indexOf('\n    },\n', start));
   const pairs = [...block.matchAll(/r\.status === (\d+)\) return \{ kind: '(\w+)' \}/g)];
@@ -306,7 +307,7 @@ test('each status maps to the result the web player maps it to', () => {
   assert.match(block, /if \(!r\.ok\) \{[^}]*kind: 'unavailable'/);
 });
 
-test('the payload parser knows every field of the controller’s schema, its sources and its bounds', () => {
+test('the payload parser knows every field of the controller’s schema, its sources and its bounds', { skip: stationSkip }, () => {
   const fields = (name: string) => {
     const at = SCHEMA.indexOf(`${name} = z.object(`);
     assert.ok(at >= 0, `${name} is missing`);

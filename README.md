@@ -28,7 +28,7 @@ eas build --profile development --platform ios      # or android (--profile deve
 npm start                        # expo start --dev-client
 ```
 
-`npm run lint` runs ESLint and TypeScript, matching the repository merge gate. `npm test` runs the app tests. `npm run doctor` checks Expo compatibility. See [dependency maintenance](docs/DEPENDENCIES.md) for SDK version constraints.
+`npm run lint` runs ESLint and TypeScript, matching the repository merge gate. `npm test` runs the app tests; a few compare the app's copies with the station's code, so they read a [perminder-klair/subwave](https://github.com/perminder-klair/subwave) checkout from `SUBWAVE_REPO` (default `../main`, the subwave-home layout) and skip without one. CI runs both on every PR. `npm run doctor` checks Expo compatibility. See [dependency maintenance](docs/DEPENDENCIES.md) for SDK version constraints.
 
 ## Release & updates
 
