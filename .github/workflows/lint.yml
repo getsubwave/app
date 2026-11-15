@@ -1,0 +1,67 @@
+name: Lint
+
+# Runs `npm run lint` (ESLint + tsc --noEmit) and `npm test` on every PR and on
+# pushes to main. Lint replaces the `app` entry of the station monorepo's lint
+# matrix, which went away when the app moved here (perminder-klair/subwave#2348).
+#
+# The tests also check the app's copies against the station's own code (the web
+# player's request-outcome labels and lyrics helpers, the controller's lyrics
+# schema), so the test job checks out perminder-klair/subwave's develop branch
+# beside this repo and points SUBWAVE_REPO at it (scripts/station-repo.ts).
+#
+# Security note: no untrusted input (PR title/body/commit message) flows into
+# any `run:` step.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run lint
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the station (web player and controller sources)
+        uses: actions/checkout@v4
+        with:
+          repository: perminder-klair/subwave
+          ref: develop
+          path: .station
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm test
+        env:
+          SUBWAVE_REPO: ${{ github.workspace }}/.station
