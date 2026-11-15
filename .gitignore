@@ -45,3 +45,7 @@ secrets/
 
 # local EAS build output (eas build --local --output)
 /build/
+
+# native module build output
+modules/*/android/build/
+targets/*/Info.plist
