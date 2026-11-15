@@ -1,8 +1,5 @@
-// Clamped text with a More/Less control that appears only when the text
-// actually overflows — measured, not assumed. The measuring copy is unclamped
-// and invisible: onTextLayout under numberOfLines does not report the full
-// line count the same way on iOS and Android. The clamp is visual only;
-// screen readers get the whole string either way.
+// The measuring copy is unclamped and invisible: onTextLayout under numberOfLines
+// does not report the full line count the same way on iOS and Android.
 
 import { useState } from 'react';
 import { Pressable, Text, View, type StyleProp, type TextStyle } from 'react-native';
@@ -10,7 +7,6 @@ import { useTheme } from '@/theme/ThemeContext';
 
 export interface ExpandableTextProps {
   text: string;
-  /** Lines shown while collapsed. */
   lines: number;
   className?: string;
   style?: StyleProp<TextStyle>;

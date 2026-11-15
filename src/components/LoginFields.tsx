@@ -1,11 +1,6 @@
-// The "Station login" fields, shared by adding a station (onboarding) and
-// editing a saved one's login (station-login, #1873). The login is the HTTP
-// Basic Auth pair a reverse proxy may ask for, never the station password.
-
 import { Alert, Text, TextInput, View } from 'react-native';
 import { useTheme } from '@/theme/ThemeContext';
 
-/** Ask before a login is sent to a station over plain http://. */
 export function confirmCleartextLogin(): Promise<boolean> {
   return new Promise((resolve) => {
     Alert.alert(
@@ -25,7 +20,6 @@ export interface LoginFieldsProps {
   password: string;
   onChangeUsername: (value: string) => void;
   onChangePassword: (value: string) => void;
-  /** The password field's return key. */
   onSubmit: () => void;
   editable?: boolean;
 }

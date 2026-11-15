@@ -1,10 +1,7 @@
-// Directory origin defaults to the featured station; app.json extra.directoryUrl overrides it.
-
 import Constants from 'expo-constants';
 import { readDirectory } from './directory-read';
 import { featuredStation } from './station';
 
-/** Mirrors the web `Station` interface; lat/lon are dropped (no map in app). */
 export interface DirectoryStation {
   slug: string;
   name: string;
@@ -23,7 +20,6 @@ export function directoryUrl(): string {
   return (extra?.directoryUrl || featuredStation().url).replace(/\/+$/, '');
 }
 
-/** The published directory, or [] on any failure (the section just hides). */
 export function fetchDirectory(signal?: AbortSignal): Promise<DirectoryStation[]> {
   return readDirectory(() => `${directoryUrl()}/stations.json`, signal);
 }

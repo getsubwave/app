@@ -1,27 +1,3 @@
-// Asking again about the saved station password while the player is stuck
-// connecting (#478, #2141). Icecast refuses a stale password without saying
-// so, as far as the player can tell: it just keeps reconnecting. So
-// useStationGate asks the controller's fail-closed POST /station-auth.
-//
-// watchStuckLogin's shape (stuck-login-check.ts), for its reasons: one answer
-// does not settle it. A check that lands while the phone is offline, one the
-// rate limit turns away, or one a proxy answers before the controller sees it
-// says nothing about the password; one that passes goes stale if the operator
-// rotates it mid-stall. So every answer but 'denied' asks again, as long as
-// the player stays stuck. Two differences:
-//
-// - The gap is 120 s, not 30 s. /station-auth allows 20 attempts per 15
-//   minutes per IP, a pass spends one too, and a household shares an address:
-//   at this gap one stuck player spends at most 8 in a window. Once that
-//   address is over the limit, a 429's Retry-After holds the next check
-//   longer: a refused attempt costs the limit nothing, but it tells nothing
-//   either, until the window has room again (#2164).
-// - A denial that lands after the stall ended is still reported. It is the
-//   controller's answer about the stored password, not about the stall, and a
-//   stop while the check was out must still lead to the prompt that says why.
-//
-// web/lib/stuckPasswordCheck.ts mirrors this; a change goes in both.
-
 import type { StationAuthResult } from './station-password';
 
 export const STUCK_RECHECK_MS = 15_000;

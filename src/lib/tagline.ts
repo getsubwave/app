@@ -1,4 +1,3 @@
-// SOURCE OF TRUTH: web/web/lib/tagline.ts — pure function, kept in sync.
 import type { StationContext } from './types';
 
 export function buildTagline(context: StationContext | null | undefined): string | null {

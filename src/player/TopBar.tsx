@@ -15,7 +15,6 @@ export interface TopBarProps {
   djName?: string;
   activeShow: ActiveShow | null;
   onOpenPanel: () => void;
-  /** Show an accent dot when sleep or casting is active. */
   panelActive: boolean;
 }
 

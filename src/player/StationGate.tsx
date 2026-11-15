@@ -1,8 +1,3 @@
-// The private-station password prompt (#478). With the private player on it
-// stands in for the whole player (`solid`); with only the stream password on,
-// it sits over a dimmed player. Either way the listener can leave for another
-// station — unlike the web player, this app is not tied to one.
-
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -27,11 +22,9 @@ const FAILURE_COPY: Record<Exclude<StationAuthResult, 'ok'>, string> = {
 const SAVED_REJECTED_COPY = 'The saved password was not accepted.';
 
 export interface StationGateProps {
-  /** Checking a saved password: show a spinner, not the form. */
   checking: boolean;
   solid: boolean;
   stationName: string | null;
-  /** Asking again because the saved password was refused. */
   savedRejected?: boolean;
   unlock: (password: string) => Promise<StationAuthResult>;
 }
@@ -42,7 +35,6 @@ export default function StationGate({ checking, solid, stationName, savedRejecte
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  // Until the listener tries a password, say why they are being asked again.
   const notice = error || (savedRejected && !submitted ? SAVED_REJECTED_COPY : '');
 
   const submit = async () => {
@@ -62,7 +54,6 @@ export default function StationGate({ checking, solid, stationName, savedRejecte
       accessibilityViewIsModal
     >
       {solid ? null : (
-        // Opacity rather than an alpha suffix: a theme colour may be rgb().
         <>
           <BlurView
             intensity={30}

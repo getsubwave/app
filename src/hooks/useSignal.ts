@@ -5,11 +5,9 @@ import type { PlayerStatus } from './usePlayer';
 
 export const SCALE_MAX = 250;
 const PROBE_INTERVAL_MS = 5000;
-// Back off after consecutive failures so a dead origin is not probed every 5s.
 const PROBE_BACKOFF_MS = 15000;
 const PROBE_BACKOFF_AFTER = 3;
 const PROBE_TIMEOUT_MS = 4000;
-// Phone round trips of 200–300ms are normal for buffered audio; keep the full scale good.
 const GOOD_MS = SCALE_MAX;
 
 export type SignalQuality =
@@ -86,7 +84,6 @@ export function useSignal({ api, tunedIn, status, offline }: UseSignalOptions): 
     };
   }, [api, tunedIn, offline, appActive]);
 
-  // Grade playback health separately from latency; reserve poor for an unreachable station.
   const quality = useMemo<SignalQuality>(() => {
     if (offline) return 'offline';
     if (!tunedIn) return 'idle';

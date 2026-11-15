@@ -28,8 +28,7 @@ import { ThemeProvider } from '@/theme/ThemeContext';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// Hide the splash here too: a SplashGate render failure would otherwise
-// leave it covering the error screen. RootLayout errors use Expo Router's default boundary.
+// RootLayout errors use Expo Router's default boundary.
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});

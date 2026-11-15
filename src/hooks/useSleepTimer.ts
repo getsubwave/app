@@ -1,16 +1,9 @@
-// Keep the timer running during background audio. A wall-clock deadline
-// lets a suspended JS thread catch up without extending the chosen duration.
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface SleepTimer {
-  /** True while a timer is armed. */
   active: boolean;
-  /** The duration the running timer was armed with, or null when not armed. */
   armedMinutes: number | null;
-  /** Whole seconds until the timer fires, or null when not armed. */
   remainingSec: number | null;
-  /** Arm (or re-arm) the timer. */
   start: (minutes: number) => void;
   cancel: () => void;
 }

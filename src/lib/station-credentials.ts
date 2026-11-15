@@ -14,7 +14,6 @@ export interface StoredStationStore {
   recents: StoredStationRef[];
 }
 
-/** Strip a trailing slash; default to https:// if the user typed a bare host. */
 export function normalizeStationBase(raw: string): string {
   let value = (raw || '').trim();
   if (!value) return value;
@@ -30,7 +29,6 @@ function decodeUserinfo(value: string): string {
   }
 }
 
-/** Separate legacy URL userinfo from the public station address. */
 export function splitStationAddress(raw: string): {
   base: string;
   credentials: StationCredentials | null;
@@ -90,7 +88,6 @@ export function authorizationFor(credentials: StationCredentials): string {
   return `Basic ${base64(`${credentials.username}:${credentials.password}`)}`;
 }
 
-/** Reconstruct the proven URL-userinfo request path in memory only. */
 export function credentialedBase(base: string, credentials: StationCredentials | null): string {
   const cleanBase = splitStationAddress(base).base;
   if (!credentials) return cleanBase;
@@ -115,8 +112,6 @@ export function resolveStationConnection(
   };
 }
 
-/** Probe a bare public station over TLS first. Authenticated probes never
- * silently downgrade to cleartext; listeners must type http:// explicitly. */
 export function stationProbeCandidates(raw: string, authenticated: boolean): string[] {
   const trimmed = raw.trim();
   const split = splitStationAddress(trimmed);
@@ -128,8 +123,6 @@ export function stationProbeCandidates(raw: string, authenticated: boolean): str
     : [`https://${bareBase}`, `http://${bareBase}`];
 }
 
-/** Remove userinfo from legacy AsyncStorage records and return secrets for
- * migration into platform-secure storage. */
 export function migrateLegacyStationStore(store: StoredStationStore): {
   store: StoredStationStore;
   credentials: Record<string, StationCredentials>;
@@ -149,14 +142,12 @@ export function migrateLegacyStationStore(store: StoredStationStore): {
     recent,
     split: splitAndMark(recent.url),
   }));
-  // Recents are newest-first. Walk oldest-to-newest so the latest login wins.
   for (let i = splitRecents.length - 1; i >= 0; i--) {
     const { split } = splitRecents[i];
     if (split.credentials) credentials[split.base] = split.credentials;
   }
 
   const active = store.activeStation ? splitAndMark(store.activeStation) : null;
-  // The active URL is the most authoritative legacy record.
   if (active?.credentials) credentials[active.base] = active.credentials;
 
   const activeStation = active?.base ?? null;

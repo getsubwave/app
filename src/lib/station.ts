@@ -1,6 +1,3 @@
-// Station URLs and recents live in AsyncStorage; credentials live in the
-// platform keychain. app.json extra.featuredStation supplies the featured station.
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
@@ -26,7 +23,6 @@ const secureStorage = {
     }),
 };
 const credentialVault = createCredentialVault(secureStorage);
-// The private-station password (#478) — kept apart from the proxy login.
 const stationPasswords = createStationPasswordStore(secureStorage);
 
 export interface StationRef {
@@ -68,8 +64,6 @@ export async function loadStations(): Promise<StationStore> {
   const migrated = migrateLegacyStationStore(loaded);
   if (!migrated.changed) return loaded;
   try {
-    // Store secrets first. If secure storage is unavailable, leave the legacy
-    // record untouched rather than deleting the listener's only credential.
     await credentialVault.merge(migrated.credentials);
     await persist(migrated.store);
     return migrated.store;
@@ -86,8 +80,6 @@ export async function loadStationCredentials(
   return credentialVault.get(split.base);
 }
 
-/** Replace or remove a saved station's login (#1873), leaving which station
- *  is active and the recents untouched. */
 export async function saveStationCredentials(
   rawUrl: string,
   credentials: StationCredentials | null,
@@ -113,11 +105,9 @@ async function persist(store: StationStore): Promise<void> {
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(store));
   } catch {
-    /* non-fatal */
   }
 }
 
-/** Mark a station active and push it to the front of the MRU recents list. */
 export async function setActiveStation(
   ref: StationRef,
   credentials?: StationCredentials | null,
@@ -125,8 +115,6 @@ export async function setActiveStation(
   const split = splitStationAddress(ref.url);
   const url = split.base;
   const nextCredentials = credentials === undefined ? split.credentials : credentials;
-  // Do not commit a clean station record when its secret could not be saved:
-  // that would present a broken recent after the current process exits.
   if (nextCredentials) await credentialVault.set(url, nextCredentials);
   else if (credentials === null) await credentialVault.remove(url);
   const store = await loadStations();

@@ -19,8 +19,6 @@ export interface TransportBarProps {
   latencyMs: number | null;
   signalQuality: SignalQuality;
   listeners: number | null;
-  /** Cast device name while a session is active, else null. Swaps the Signal
-   *  label for a "Cast · <device>" read. */
   castingTo?: string | null;
 }
 

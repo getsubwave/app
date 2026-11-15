@@ -30,10 +30,8 @@ function buildMoodPhrase(t: NowPlayingTrack | null): string {
 export interface CenterStageProps {
   nowPlaying: NowPlayingTrack | null;
   coverSrc: string | null;
-  /** The Station login for the cover (StationApi.imageHeaders). */
   coverHeaders?: Record<string, string>;
   elapsed: number;
-  /** Cumulative since-boot LLM token total (#449); null hides the ticker. */
   llmTokens: number | null;
   trackLike: TrackLike;
   feed: SessionTurn[];
@@ -41,14 +39,7 @@ export interface CenterStageProps {
   live: boolean;
   onOpenBooth: () => void;
   onOpenTimeline: () => void;
-  /** This device's lyrics choice, for the button beside the heart: shown
-   *  whenever the station offers lyrics, so they can be turned back on from
-   *  where they were. Absent while the station has lyrics off. */
   lyrics?: { shown: boolean; onOpen: () => void } | null;
-  /** Lyrics are showing below (StageLyrics), so the track info shrinks to one
-   *  row: a 64px cover beside the clock, a one-line title and the artist. It
-   *  drops the album, year, tags, token count, "Now playing" label and DJ
-   *  line, as the Classic skin does on a phone. */
   compact?: boolean;
 }
 
@@ -75,7 +66,6 @@ export default function CenterStage({
   const moodPhrase = buildMoodPhrase(nowPlaying);
   const hasMeta = metaTokens.length > 0 || moodPhrase.length > 0;
 
-  // SessionTurn.t is a change key; the feed index suffices when it is absent.
   const latestDjTurnT = useMemo<string | number | null>(() => {
     if (!feed?.length) return null;
     for (let i = feed.length - 1; i >= 0; i--) {
@@ -104,8 +94,6 @@ export default function CenterStage({
   const burst = trackBurst || djBurst;
 
   const clock = has ? (duration ? `${fmtTime(elapsed)} / ${fmtTime(duration)}` : fmtTime(elapsed)) : '';
-  // The compact row is plainly the track on air, and the label would push the
-  // clock off a narrow phone.
   const caption = compact ? clock : `NOW PLAYING${clock ? ` — ${clock}` : ''}`;
   const LyricsIcon = lyrics?.shown ? Captions : CaptionsOff;
 

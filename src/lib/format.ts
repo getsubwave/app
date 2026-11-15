@@ -1,5 +1,3 @@
-// SOURCE OF TRUTH: web/web/lib/format.ts — kept in sync (pure functions).
-
 export function fmtTime(sec: number | null | undefined): string {
   if (sec == null || !Number.isFinite(sec)) return '–:––';
   const s = Math.max(0, Math.floor(sec));
@@ -8,7 +6,6 @@ export function fmtTime(sec: number | null | undefined): string {
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
-/** Station display locale (#475): UK is 24-hour, US is AM/PM. */
 export type StationLocale = 'en-GB' | 'en-US';
 
 export const DEFAULT_STATION_LOCALE: StationLocale = 'en-GB';
@@ -21,8 +18,6 @@ function stationClockOptions(locale: StationLocale): Intl.DateTimeFormatOptions 
   return locale === 'en-US' ? { hour12: true } : { hour12: false };
 }
 
-// Use station zone and locale for on-air stamps; fall back to device zone.
-// Return empty for missing timestamps.
 export function fmtClock(
   t: string | number | null | undefined,
   tz?: string | null,
@@ -40,8 +35,6 @@ export function fmtClock(
   }
 }
 
-// HH:MM (no seconds) in the station's zone; mirrors web's fmtClockMinute.
-// Used for the booth's show-boundary separator (#1690). '' when unparseable.
 export function fmtClockMinute(
   t: string | number | Date,
   tz?: string | null,
@@ -60,9 +53,6 @@ export function fmtClockMinute(
   }
 }
 
-/** When a history entry aired: `startedAt`, else the older `t`, else
- *  `queuedAt` as a last resort. null when none parses. The web's entryTime
- *  reads only `t` then `queuedAt`; `startedAt` is the truer "played at". */
 export function playedAt(e: {
   t?: unknown;
   startedAt?: unknown;

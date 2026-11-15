@@ -8,12 +8,11 @@ import { useTheme } from '@/theme/ThemeContext';
 
 const BARS = 120;
 const HEIGHT = 60;
-const GAP = 1.5; // px between bars — the web's `gap-px`
+const GAP = 1.5;
 
 export interface WaveformProps {
   tunedIn: boolean;
   progress: number;
-  /** Whether the LIVE page is on screen — gates the spectrum simulation. */
   visible?: boolean;
 }
 
@@ -35,7 +34,7 @@ export default memo(function Waveform({ tunedIn, progress, visible = true }: Wav
 
   const accent = colors.accent;
   const ink = colors.ink;
-  const cut = progress * BARS; // bars with i < cut have already played
+  const cut = progress * BARS;
 
   return (
     <View
@@ -51,7 +50,7 @@ export default memo(function Waveform({ tunedIn, progress, visible = true }: Wav
               <Rect
                 key={i}
                 x={geom.xs[i]}
-                y={(HEIGHT - h) / 2} // centre-anchored, mirroring the web's items-center
+                y={(HEIGHT - h) / 2}
                 width={geom.barW}
                 height={h}
                 color={i < cut ? accent : ink}

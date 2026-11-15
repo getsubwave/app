@@ -1,6 +1,3 @@
-// The native scroll driver moves the needle without React renders.
-// Memoized pages rely on useStationFeed preserving unchanged payload identities.
-
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -74,7 +71,6 @@ import SleepDrawer from './drawers/SleepDrawer';
 import ThemesDrawer from './drawers/ThemesDrawer';
 import TimelineDrawer from './drawers/TimelineDrawer';
 
-// Keep beacon deduplication across remounts and station round-trips.
 const beaconedBases = new Set<string>();
 
 const PAGES: readonly BandStop[] = [
@@ -204,8 +200,6 @@ export default function PlayerScreen() {
   const { isConnected } = useConnectivity();
   const appActive = useAppActive();
 
-  // bgPoll bridges the feed/player cycle: streamInfo validates the player
-  // format, while tunedIn enables background feed polling.
   const [bgPoll, setBgPoll] = useState(false);
   const {
     nowPlaying,
@@ -248,9 +242,6 @@ export default function PlayerScreen() {
   });
   const { tunedIn, status, volume, setVolume, tune, stop, toggleMute, muted } = player;
 
-  // Private station (#478): the private player hides the whole face until the
-  // password is in ('checking' counts as hidden, so a saved password still
-  // being verified cannot flash it); stream-only auth prompts over the face.
   const gate = useStationGate({
     api,
     privacy: state.privacy,
@@ -264,34 +255,23 @@ export default function PlayerScreen() {
     tune,
   });
   const hideFace = gate.solid && gate.phase !== 'ok';
-  // A refused Station login (#1873) stops the player and covers it, over
-  // either gate: a proxy that refuses the login refuses /station-auth too.
   const login = useLoginCheck({ api, hasLogin, tunedIn, status, stop });
 
   const offline = streamOnline === false;
   const signal = useSignal({ api, tunedIn, status, offline });
 
-  // Lyrics take the Live page while the track has them, synced or not, and
-  // the track info shrinks to one row above them. Never asked for until a
-  // locked station's password is proven (gate.readsOpen): a refusal spends the
-  // household's station-read attempts, and the lyrics ask again once unlocked.
   const lyricsOn = state.lyrics?.enabled === true;
   const lyricsPref = useLyricsPreference();
   const showLyrics = lyricsOn && lyricsPref.shown && !offline && gate.readsOpen;
   const lyricsTrack = useTrackLyrics(api, showLyrics ? nowPlaying?.subsonic_id : null, appActive);
-  // The hold bridges two tracks that both have lyrics; hiding them (the
-  // switch, going offline, a lock) cuts at once, as on the web.
   const lyricsLinger = useLingeringPresence(
     syncedLyricsReady(lyricsTrack) || plainLyricsReady(lyricsTrack),
     LYRICS_LAYOUT_HOLD_MS,
   );
-  // A screen too short for the lyrics keeps the full track info, as the web
-  // does; the lyrics settings say why nothing shows.
   const { height: windowHeight } = useWindowDimensions();
   const lyricsFit = windowHeight >= LYRICS_MIN_SCREEN_HEIGHT;
   const lyricsPresent = showLyrics && lyricsFit && lyricsLinger;
 
-  // Disarm on tune-out so the next listening session cannot inherit this timer.
   const sleep = useSleepTimer(stop);
   const cancelSleep = sleep.cancel;
   const prevTunedInRef = useRef(tunedIn);
@@ -312,7 +292,6 @@ export default function PlayerScreen() {
 
   const coverColors = useCoverColors(coverSrc, coverHeaders);
 
-  // Cast has no local RNTP media session; update OS metadata only for local playback.
   useNowPlayingInfo({
     api,
     tunedIn: localPlayer.tunedIn,
@@ -337,7 +316,6 @@ export default function PlayerScreen() {
     like: trackLike,
   });
 
-  // Offline is debounced upstream so a transient failure cannot stop playback.
   useEffect(() => {
     if (offline && tunedIn) stop();
   }, [offline, tunedIn, stop]);
@@ -354,7 +332,6 @@ export default function PlayerScreen() {
     if (w > 0 && w !== pagerW) setPagerW(w);
   };
 
-  // Some platforms ignore initial contentOffset; position the pager after layout.
   useEffect(() => {
     if (pagerW > 0 && !didInit.current) {
       didInit.current = true;
@@ -365,7 +342,6 @@ export default function PlayerScreen() {
 
   const onPagerScroll = useMemo(
     () =>
-      // Animated.event stores the listener; it reads refs only on scroll.
       // eslint-disable-next-line react-hooks/refs
       Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
         useNativeDriver: true,
@@ -399,14 +375,12 @@ export default function PlayerScreen() {
   const openTimeline = useCallback(() => goToPage(TIMELINE_INDEX), [goToPage]);
   const goHome = useCallback(() => goToPage(HOME_INDEX), [goToPage]);
 
-  // Share one sheet to avoid competing dismissal callbacks.
   const [activeSheet, setActiveSheet] = useState<SheetId | null>(null);
   const openLyrics = useCallback(() => setActiveSheet('lyrics'), []);
   const stageLyrics = useMemo(
     () => (lyricsOn ? { shown: lyricsPref.shown, onOpen: openLyrics } : null),
     [lyricsOn, lyricsPref.shown, openLyrics],
   );
-  // The operator switching lyrics off takes their settings with them.
   useEffect(() => {
     if (!lyricsOn) setActiveSheet((open) => (open === 'lyrics' ? null : open));
   }, [lyricsOn]);
@@ -417,7 +391,6 @@ export default function PlayerScreen() {
   const streamFormatLabel =
     streamFormat.options.length > 1 ? formatLabel(streamFormat.format) : null;
 
-  // Pad pages by measured overlay heights so content can scroll clear of both.
   const [barInset, setBarInset] = useState(120);
   const onBarLayout = useCallback((e: LayoutChangeEvent) => {
     const h = e.nativeEvent.layout.height;
@@ -430,12 +403,10 @@ export default function PlayerScreen() {
     if (h > 0) setHeaderInset((prev) => (Math.abs(prev - h) > 0.5 ? h : prev));
   }, []);
 
-  // A sheet is a Modal, so it would sit above the prompt and stay usable.
   useEffect(() => {
     if (gate.phase === 'prompt' || login.rejected) setActiveSheet(null);
   }, [gate.phase, login.rejected]);
 
-  // The pager unmounts behind a solid gate; bring it back on the home page.
   useEffect(() => {
     if (!hideFace) return;
     activeRef.current = HOME_INDEX;

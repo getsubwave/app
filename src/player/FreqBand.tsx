@@ -1,5 +1,3 @@
-// The needle uses native-driver scrollX to avoid React renders during swipes.
-
 import { memo, useMemo, useState } from 'react';
 import { Animated, type LayoutChangeEvent, Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/theme/ThemeContext';
@@ -13,15 +11,12 @@ export interface BandStop {
 export interface FreqBandProps {
   pages: readonly BandStop[];
   active: number;
-  /** Pager contentOffset.x, fed from Animated.event(useNativeDriver). */
   scrollX: Animated.Value;
-  /** pagerWidth * (pages - 1): the scroll position of the last page. */
   maxScroll: number;
   onPick: (i: number) => void;
 }
 
 const TICKS = 41;
-// Stops and needle live within the 8%-92% inner band.
 const stopPct = (i: number, n: number) => 8 + (i * 84) / (n - 1);
 
 function FreqBand({ pages, active, scrollX, maxScroll, onPick }: FreqBandProps) {

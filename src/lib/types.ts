@@ -1,6 +1,3 @@
-// Types for the controller HTTP surface. Source of truth is
-// web/web/lib/types.ts; keep this copy in sync. Pure interfaces only.
-
 import type { StationLocale } from './format';
 
 export type { StationLocale };
@@ -14,7 +11,6 @@ export interface NowPlayingTrack {
   year?: number;
   duration?: number;
   subsonic_id?: string;
-  // Tag data merged in from the library DB; an untagged track omits all of it.
   genre?: string | null;
   bpm?: number | null;
   musicalKey?: string | null;
@@ -142,14 +138,12 @@ export interface NowPlayingResponse {
   streamOnline?: boolean;
   /** kbps of the first attached broadcast mount; null when offline. */
   streamBitrate?: number | null;
-  /** Drives the listener stream-format picker. */
   stream?: StreamInfo;
   /** Cumulative since-boot LLM token total. */
   llmTokens?: number | null;
   /** Station IANA timezone. Render on-air timestamps in it, not the device's,
    *  so they match what the DJ speaks (#418). */
   timezone?: string;
-  /** UK keeps 24-hour time; US uses AM/PM. */
   locale?: StationLocale;
 }
 

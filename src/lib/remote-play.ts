@@ -1,17 +1,7 @@
-// A Play from the lock screen, a headset, CarPlay or Bluetooth (#2139). It
-// reaches service.ts, RNTP's playback service, which can't see React state.
-// While the app's player is mounted, the service hands the Play to it, so the
-// reload goes through stream-recovery like every other: one load at a time,
-// with the stream URL and Station login read now rather than kept from the
-// last load (#1873).
-//
 // The service shares the app's JS runtime, so this module's handler is the
 // mounted player's. iOS runs the service beside the app at startup, and RNTP
 // 4.1.2's Android service runs it as a headless task in the app's React
-// context. On Android it can also run with no player mounted. With the
-// activity destroyed while the audio plays on, the service reloads the last
-// stream itself, as it always has. A process started for the service alone
-// has no last stream, so there it only resumes.
+// context. On Android it can also run with no player mounted.
 
 /** Takes a remote Play; returns false to leave it to the service. */
 export type RemotePlayHandler = () => boolean;
@@ -48,8 +38,6 @@ export async function remotePlay(deps: RemotePlayDeps): Promise<void> {
       await deps.reloadLast();
       return;
     }
-  } catch {
-    /* fall through to a plain resume */
-  }
+  } catch {}
   await deps.resume().catch(() => {});
 }

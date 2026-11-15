@@ -1,11 +1,3 @@
-// What the lyrics button beside the heart opens, the app's
-// web/components/skins/LyricsSettings.tsx: this device's switch for lyrics, a
-// line on what the track has, and, while synced lyrics show, this device's
-// timing nudge (web/components/skins/LyricsTiming.tsx's device half: a slider
-// across the whole range, with buttons for the fine steps). The station's
-// per-track fix is the operator's, from the web admin console, so it is
-// applied here but never offered.
-
 import * as Haptics from 'expo-haptics';
 import { Minus, Plus, RotateCcw } from 'lucide-react-native';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -23,11 +15,9 @@ import {
 import { useTheme } from '@/theme/ThemeContext';
 
 export interface LyricsDrawerProps {
-  /** This device's choice to show lyrics. */
   shown: boolean;
   onToggle: () => void;
   track: TrackLyrics;
-  /** The screen is tall enough for the Live page to show lyrics. */
   fits: boolean;
 }
 
@@ -72,10 +62,6 @@ function IconButton({
   );
 }
 
-/** The device offset across LYRIC_OFFSET_MIN_MS..MAX_MS in LYRIC_OFFSET_STEP_MS
- *  steps: drag the thumb or tap along the track. Each step lands at once, so
- *  the lyrics behind the sheet move as it is dragged. VoiceOver adjusts it a
- *  nudge at a time. */
 function OffsetSlider({ value, onChange }: { value: number; onChange: (next: number) => void }) {
   const { colors } = useTheme();
   const [width, setWidth] = useState(0);
@@ -90,7 +76,6 @@ function OffsetSlider({ value, onChange }: { value: number; onChange: (next: num
   }, [width, value, onChange]);
   const startXRef = useRef(0);
 
-  // PanResponder stores these callbacks; refs are read only during gestures.
   // eslint-disable-next-line react-hooks/refs
   const [pan] = useState(() => {
     const seek = (x: number) => {
@@ -106,7 +91,6 @@ function OffsetSlider({ value, onChange }: { value: number; onChange: (next: num
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      // The sheet scrolls vertically; a drag that wanders must stay a drag.
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e: GestureResponderEvent) => {
         startXRef.current = e.nativeEvent.locationX;
@@ -137,7 +121,6 @@ function OffsetSlider({ value, onChange }: { value: number; onChange: (next: num
       <View pointerEvents="none" style={{ height: 2, backgroundColor: colors.softBorder }} />
       {width > 0 ? (
         <>
-          {/* No correction sits at the centre of the range. */}
           <View
             pointerEvents="none"
             style={{

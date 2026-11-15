@@ -1,6 +1,4 @@
 // Cast fetches the URL itself and cannot send our Authorization header.
-// Authenticated stations stay on local playback.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   MediaPlayerState,
@@ -26,7 +24,6 @@ export interface CastInfo {
    *  stream) and the Cast framework exists on this device (castState is null
    *  on Android without Play Services). */
   available: boolean;
-  /** A session is active and the facade is remote. */
   connected: boolean;
   deviceName: string | null;
 }
@@ -45,7 +42,6 @@ export function useCast(
   const castable = !!api && !api.streamHeaders();
   const connected = castable && !!session && !!client;
 
-  // Remote-playback intent, the cast-side analog of usePlayer's tunedIn.
   const [castTunedIn, setCastTunedIn] = useState(false);
   const [castVolume, setCastVolume] = useState(1);
   const preMuteVolume = useRef(1);
@@ -62,8 +58,6 @@ export function useCast(
   const loadToCast = useCallback(async (c: RemoteMediaClient) => {
     const a = apiRef.current;
     if (!a) return;
-    // Optimistic: the facade's tunedIn must not blip false during handoff
-    // (PlayerScreen disarms the sleep timer on a true→false transition).
     setCastTunedIn(true);
     try {
       await loadLiveStream(c, { url: a.streamUrl(), ...metaRef.current });
@@ -77,8 +71,6 @@ export function useCast(
     const prev = prevClientRef.current;
     prevClientRef.current = client;
     if (!prev && client) {
-      // Connected. Seed the knob from the device's real volume, and move the
-      // audio over if the listener was already tuned in locally.
       session?.getVolume().then((v) => {
         if (typeof v === 'number' && Number.isFinite(v)) {
           setCastVolume(Math.max(0, Math.min(1, v)));
@@ -89,15 +81,12 @@ export function useCast(
         void loadToCast(client);
       }
     } else if (prev && !client) {
-      // Disconnected: resume locally if we were remote-tuned.
       const wasTuned = castTunedInRef.current;
       setCastTunedIn(false);
       if (wasTuned) localRef.current.tune();
     }
   }, [client, castable, session, loadToCast]);
 
-  // Adopt an already-running session (app restart while the speaker plays) so
-  // the UI doesn't show a dark power ring over live audio.
   useEffect(() => {
     if (!connected || castTunedInRef.current) return;
     const a = apiRef.current;
@@ -112,7 +101,6 @@ export function useCast(
     }
   }, [connected, mediaStatus]);
 
-  // Terminal receiver idle: reflect tuned-out rather than spinning forever.
   // idleReason is undefined outside a terminal idle (e.g. while loading).
   useEffect(() => {
     if (!castTunedIn) return;
@@ -121,7 +109,6 @@ export function useCast(
     }
   }, [mediaStatus, castTunedIn]);
 
-  // Station switch while casting stops playback, matching the local player.
   const prevBaseRef = useRef(api?.base ?? null);
   useEffect(() => {
     const next = api?.base ?? null;
@@ -160,8 +147,6 @@ export function useCast(
     [session],
   );
 
-  // Functional updater: TransportBar's knob calls setVolume then toggleMute in
-  // one gesture, so this must see the just-queued value, not this render's.
   const castToggleMute = useCallback(() => {
     setCastVolume((v) => {
       const next = v > 0 ? 0 : preMuteVolume.current || 1;
@@ -175,8 +160,6 @@ export function useCast(
     });
   }, [session]);
 
-  // `paused` maps to playing: a live mount has no meaningful pause and the
-  // listener is still tuned.
   let castStatus: PlayerStatus = 'idle';
   if (castTunedIn) {
     const ps = mediaStatus?.playerState;
@@ -186,8 +169,6 @@ export function useCast(
         : 'connecting';
   }
 
-  // `castTunedIn || local.tunedIn` keeps the facade's tunedIn continuously
-  // true across the connect handoff (local flips false as cast flips true).
   const player: Player = useMemo(
     () =>
       connected

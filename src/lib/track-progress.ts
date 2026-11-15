@@ -1,6 +1,5 @@
 import type { NowPlayingTrack } from './types';
 
-/** startedAt is listener-time: useStationFeed has already added the buffer. */
 export function trackElapsedSeconds(startedAt: number | null, now = Date.now()): number {
   return startedAt == null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1000));
 }

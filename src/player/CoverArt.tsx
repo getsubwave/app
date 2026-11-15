@@ -7,16 +7,13 @@ import { useTheme } from '@/theme/ThemeContext';
 
 export interface CoverArtProps {
   uri: string;
-  /** The Station login for this image (StationApi.imageHeaders). */
   headers?: Record<string, string>;
   live: boolean;
-  /** ~3s window after a track change or DJ turn — drives the glitch + ticks. */
   burst?: boolean;
   size?: number;
   onPress?: () => void;
 }
 
-// dx values offset the ghost copies; tear marks a jumping color slice.
 const GLITCH_FRAMES = [
   { dx1: -3, dx2: 3, tearY: 0.10, tearX: -5, tearH: 0.06 },
   { dx1: 2, dx2: -2, tearY: 0.46, tearX: 5, tearH: 0.05 },
@@ -26,7 +23,6 @@ const GLITCH_FRAMES = [
 ];
 const TEAL = '#16d6cf';
 
-// RN lacks mix-blend-mode; faint offset copies approximate tinted channels.
 function CoverGlitch({
   uri,
   headers,

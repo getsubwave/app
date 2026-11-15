@@ -1,10 +1,3 @@
-// The app's half of web/components/skins/lyrics.ts useTrackLyrics: the lyrics
-// of the track the LISTENER is hearing (the feed's now-playing, already held a
-// stream buffer behind the live edge), asked again only while the station
-// could not answer or says a better answer is on its way, plus this device's
-// timing nudge. The station's own per-track correction rides in the payload
-// (`offsetMs`); the app applies it and never edits it.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StationApi } from '@/lib/api';
 import {
@@ -23,10 +16,6 @@ export interface TrackLyrics extends LyricsAnswer {
 
 const IDLE: TrackAnswer = { songId: null, status: 'idle', lyrics: null };
 
-/** The lyrics of `songId`, the listener's now-playing `subsonic_id`; null asks
- *  for nothing (lyrics hidden or off, the station still locked, or nothing
- *  from the library on air). While `active` is false (the app backgrounded) no
- *  new ask starts, and the last answer is kept for when it comes back. */
 export function useTrackLyrics(
   api: StationApi | null,
   songId: string | null | undefined,
@@ -34,20 +23,12 @@ export function useTrackLyrics(
 ): TrackLyrics {
   const id = (api && songId) || null;
   const [answer, setAnswer] = useState<TrackAnswer>(IDLE);
-  // Read by the ask effect, so coming back to the foreground can tell an
-  // answer worth keeping from one worth asking again. Declared first, so it
-  // is current by the time that effect runs in the same commit.
   const answerRef = useRef(answer);
   useEffect(() => {
     answerRef.current = answer;
   }, [answer]);
   const [deviceOffsetMs, setDeviceOffsetState] = useState(0);
-  // The station and track the ask effect last ran for, to spot a track id
-  // left over from the station before a switch.
   const lastRunRef = useRef({ api, id });
-  // Rechecks of a pending answer made for the current track, across runs of
-  // the ask effect: the PENDING_MAX_ASKS cap is per track, not per trip to the
-  // foreground.
   const rechecksRef = useRef({ songId: null as string | null, asks: 0 });
 
   useEffect(() => {
@@ -68,10 +49,6 @@ export function useTrackLyrics(
       return;
     }
     if (!active) return;
-    // A track id means something only to the station it came from. For the
-    // render after a station switch the feed still holds the old station's
-    // track, until its reset clears it (a new track always arrives through
-    // null), and a private station would spend an attempt refusing it.
     if (last.api !== api && last.id === id) return;
     const held = answerRef.current;
     if (held.songId === id && lyricsSettled(held)) return;
@@ -79,11 +56,7 @@ export function useTrackLyrics(
     const rechecks = rechecksRef.current;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // The backoff starts over on each run: coming back to the foreground asks
-    // at once.
     let attempt = 0;
-    // Coming back to a track whose answer was still improving keeps showing
-    // that answer while it asks again.
     if (held.songId !== id) setAnswer({ songId: id, status: 'loading', lyrics: null });
     const ask = async () => {
       const result = await api.currentLyrics(id);
@@ -102,8 +75,6 @@ export function useTrackLyrics(
     };
   }, [api, id, active]);
 
-  // An answer for a track we have moved on from is never shown, even for the
-  // render before the effect above resets it.
   const current: TrackAnswer = answer.songId === id
     ? answer
     : { songId: id, status: id ? 'loading' : 'idle', lyrics: null };
@@ -121,11 +92,6 @@ export function useTrackLyrics(
   );
 }
 
-/** Where the lyric clock stands: elapsed time since the listener heard the
- *  track start, plus the station's and this device's corrections, the value
- *  each line's `startMs` is compared with. It ticks every `tickMs` only while
- *  the lines are synced and `running` (the Live page on screen, the app in the
- *  foreground), so only the component that calls it re-renders. */
 export function useLyricClock(
   track: TrackLyrics,
   trackStartedAt: number | null,

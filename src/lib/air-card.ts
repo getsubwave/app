@@ -1,6 +1,3 @@
-// While the DJ talks, replace the artist and artwork with the persona.
-// Keep the track title: the song has not changed.
-
 import type { StationApi } from './api';
 import type { ActiveShow, NowPlayingTrack } from './types';
 
@@ -8,14 +5,9 @@ export interface AirCard {
   title: string;
   artist: string;
   album: string;
-  /** Absolute URL of the cover, or of the persona avatar while talking. */
   artworkUrl: string | undefined;
-  /** Cache key for that artwork: the subsonic id, or the avatar path. Only
-   *  surfaces that cache artwork to disk need it. */
   artworkKey: string | null;
-  /** Scheduled show name, when one is on. */
   show: string | null;
-  /** The artwork above is the persona's, not the track's. */
   showingPersona: boolean;
 }
 

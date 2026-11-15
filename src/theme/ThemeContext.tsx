@@ -1,5 +1,3 @@
-// Theme precedence: listener override, station theme, seeded defaults.
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { vars } from 'nativewind';
 import React, {
@@ -19,8 +17,6 @@ import type { Theme, ThemeMode } from '@/lib/types';
 
 const OVERRIDE_KEY = 'subwave.theme.override.v1';
 
-// Matches the web ThemeProvider. `active` is the effective theme, so an on-air
-// show's own theme takes over at the show change on the next read.
 const THEME_POLL_MS = 30_000;
 
 export interface ResolvedColors {
@@ -43,8 +39,6 @@ const DARK_DEFAULTS: ResolvedColors = {
   field: '#1b1815',
 };
 
-// Unparseable light-mode backgrounds need light defaults to keep dark text legible.
-// These values match the seeded classic-light palette.
 const LIGHT_DEFAULTS: ResolvedColors = {
   bg: '#f3efe6',
   ink: '#161412',
@@ -83,7 +77,6 @@ interface ThemeContextValue {
   activeId: string | null;
   mode: ThemeMode;
   colors: ResolvedColors;
-  /** Pick a per-listener override theme, or null to follow the station. */
   setOverride: (id: string | null) => void;
 }
 
@@ -111,10 +104,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Foreground only. The Live Activity bakes the accent in and restarts on a
   // change, and iOS cannot start one from the background, so a flip while the
-  // phone is locked would end the card. A change made meanwhile lands on return.
+  // phone is locked would end the card.
   const appActive = useAppActive();
-  // An unchanged registry keeps its identity, or every poll would re-render the
-  // whole themed tree through new colour objects.
   const themesSigRef = useRef<string | null>(null);
   useEffect(() => {
     if (!api || !appActive) return;
@@ -146,7 +137,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const mode: ThemeMode = activeTheme?.mode ?? 'dark';
   const colors = useMemo(() => colorsFromTokens(tokens, mode), [tokens, mode]);
 
-  // NativeWind vars must use RN-parseable colors, not the raw registry tokens.
   const safeTokens = useMemo(
     () => ({
       '--bg': colors.bg,

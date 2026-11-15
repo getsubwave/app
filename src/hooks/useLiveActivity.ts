@@ -1,5 +1,4 @@
-// ActivityKit rate-limits updates. The card ticks its clock natively, so push
-// only when displayed values change.
+// ActivityKit rate-limits updates.
 
 import { useEffect, useMemo, useRef } from 'react';
 import {
@@ -18,22 +17,14 @@ import type { ActiveShow, NowPlayingTrack, SessionTurn } from '@/lib/types';
 
 export interface UseLiveActivityParams {
   api: StationApi | null;
-  /** LOCAL playback only: while casting there is no audio session on this
-   *  device, so the card would be a lie. */
   tunedIn: boolean;
   nowPlaying: NowPlayingTrack | null;
   activeShow?: ActiveShow | null;
   boothFeed?: SessionTurn[];
-  /** Listener buffer behind the live edge (useStationFeed.leadMs). */
   leadMs: number;
-  /** Epoch ms when the track became audible to this listener; the
-   *  stream.bufferSeconds offset is already applied by useStationFeed. */
   trackStartedAt: number | null;
-  /** Station display name for the eyebrow. */
   station: string;
-  /** Station theme accent, `#rrggbb`. */
   accent: string;
-  /** The heart's live state; a card tap routes back into this same hook. */
   like: TrackLike;
 }
 
@@ -54,8 +45,7 @@ export function useLiveActivity({
   const talking = useTalking(boothFeed, leadMs);
   const card = api ? resolveAirCard({ api, nowPlaying, activeShow, talking }) : null;
 
-  // Native artwork fetch ignores URL userinfo; pass the Basic header, and only
-  // to this station: a persona avatar can be on another host.
+  // Native artwork fetch ignores URL userinfo.
   const artworkUrl = card?.artworkUrl;
   const artworkHeaders = useMemo(
     () => (api && artworkUrl ? api.imageHeaders(artworkUrl) : undefined) ?? {},
@@ -93,7 +83,6 @@ export function useLiveActivity({
     ],
   );
 
-  // Seed the ref before the lifecycle effect reads it on first mount.
   const stateRef = useRef(state);
   const startedRef = useRef(false);
   useEffect(() => {
@@ -102,7 +91,7 @@ export function useLiveActivity({
     void updateLiveActivity(state);
   }, [state]);
 
-  // Accent is immutable in ActivityKit attributes; a theme change restarts the card.
+  // Accent is immutable in ActivityKit attributes.
   useEffect(() => {
     if (!supported || !api || !tunedIn) return;
     let cancelled = false;
@@ -117,7 +106,6 @@ export function useLiveActivity({
     };
   }, [supported, api, tunedIn, station, accent]);
 
-  // The persistent listener must call the current track's like closure.
   const likeRef = useRef(like);
   useEffect(() => {
     likeRef.current = like;

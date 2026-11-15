@@ -21,7 +21,6 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-// Compact en-US hours to fit the 92px time gutter.
 function fmtHour(hour: number, locale: StationLocale): string {
   if (locale === 'en-US') {
     const h = hour % 24;
@@ -51,7 +50,6 @@ function tzNow(now: Date, tz?: string | null): { day: number; hour: number } {
       if (hour === 24) hour = 0; // some engines emit "24" at midnight
       if (day >= 0 && Number.isFinite(hour)) return { day, hour };
     } catch {
-      /* fall through to device-local */
     }
   }
   return { day: now.getDay(), hour: now.getHours() };
@@ -85,9 +83,6 @@ function collapseSlots(
   return out;
 }
 
-/** A DJ's name. With something published to say about them it is a control
- *  that opens their tagline (and soul, when the station publishes souls);
- *  with nothing, plain text, so there is never a control that opens nothing. */
 function PersonaName({
   name,
   expandable,
@@ -105,7 +100,6 @@ function PersonaName({
   className?: string;
   style?: StyleProp<TextStyle>;
   numberOfLines?: number;
-  /** Layout for the control when it is one. */
   controlStyle?: StyleProp<ViewStyle>;
 }) {
   if (!expandable) {
@@ -136,7 +130,6 @@ function PersonaPanel({ blurbs }: { blurbs: string[] }) {
   return (
     <View style={{ marginTop: 6, gap: 6, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: colors.softBorder }}>
       {blurbs.map((b, i) => (
-        // A published soul is a system prompt and can run long.
         <ExpandableText key={i} text={b} lines={4} className="font-body text-muted" style={{ fontSize: 12, lineHeight: 18 }} />
       ))}
     </View>
@@ -149,7 +142,6 @@ function OnNowCard({
   host,
 }: {
   activeShow: ActiveShow;
-  /** The schedule entry for the on-air show, when one matches. */
   show: ScheduleShow | null;
   host: SchedulePersona | null;
 }) {
@@ -157,7 +149,6 @@ function OnNowCard({
   const [open, setOpen] = useState(false);
   const hostName = host?.name || activeShow.persona?.name || '';
   const blurbs = personaBlurbs(host);
-  // Guest co-hosts are known only for the live show.
   const guestNames = (activeShow.guests || []).map((g) => g?.name).filter(Boolean);
   return (
     <View style={{ borderWidth: 1, borderColor: colors.accent, padding: 12, marginBottom: 16 }}>
@@ -232,7 +223,6 @@ function SlotRow({ slot, isNow, locale, api }: { slot: Slot; isNow: boolean; loc
             className="font-body text-muted"
             style={{ fontSize: 11 }}
             numberOfLines={1}
-            // Hug the name so the tap target is the name, but truncate at the row.
             controlStyle={{ alignSelf: 'flex-start', maxWidth: '100%' }}
           />
         ) : null}
@@ -261,14 +251,13 @@ export default function ScheduleDrawer({ api, activeShow, context }: ScheduleDra
   const appActive = useAppActive();
   const [data, setData] = useState<SchedulePayload | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // Null follows the station day until the listener picks a tab.
   const [pickedDay, setPickedDay] = useState<number | null>(null);
   const [now, setNow] = useState(() => new Date());
   const location = context?.weather?.location ?? null;
 
   useEffect(() => {
     if (!appActive) return;
-    setNow(new Date()); // catch up immediately on foreground
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, [appActive]);
@@ -341,7 +330,6 @@ export default function ScheduleDrawer({ api, activeShow, context }: ScheduleDra
       </View>
 
       {activeShow?.name ? (
-        // Keyed on the show so an open disclosure does not carry across the hour.
         <OnNowCard key={activeShow.name} activeShow={activeShow} show={onNow} host={onNowHost} />
       ) : null}
 
@@ -378,7 +366,6 @@ export default function ScheduleDrawer({ api, activeShow, context }: ScheduleDra
       </ScrollView>
 
       {slots.map((slot) => (
-        // Day in the key, so an open disclosure does not follow a day switch.
         <SlotRow
           key={`${day}-${slot.hour}`}
           slot={slot}

@@ -1,9 +1,3 @@
-// The private-station gate (#478), the app's half of web/components/player/
-// StationGate.tsx. /state says which locks are on; this decides whether the
-// passwords already on the device open them, and otherwise asks. Every check
-// goes through the fail-CLOSED POST /station-auth — never /listener-auth,
-// which fails open when stream auth is off.
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PlayerStatus } from '@/hooks/usePlayer';
 import type { StationApi } from '@/lib/api';
@@ -22,13 +16,8 @@ export type { GatePhase };
 
 export interface StationGate {
   phase: GatePhase;
-  /** A station-gated read (lyrics) may be sent: see stationReadsOpen. */
   readsOpen: boolean;
-  /** privatePlayer is on: the gate stands in for the whole player rather than
-   *  sitting over it, and the face stays hidden until the password is in. */
   solid: boolean;
-  /** The prompt is up because the saved password was refused, not because
-   *  there was none: the prompt says so. */
   savedRejected: boolean;
   unlock: (password: string) => Promise<StationAuthResult>;
 }
@@ -62,8 +51,6 @@ export function useStationGate({
   const [phase, setPhase] = useState<GatePhase>(required ? 'checking' : 'open');
   const [savedRejected, setSavedRejected] = useState(false);
 
-  // Read through refs so saving or forgetting a password does not re-run the
-  // verification that caused it.
   const passwordsRef = useRef({ stationPassword, loginPassword });
   useEffect(() => {
     passwordsRef.current = { stationPassword, loginPassword };
@@ -77,14 +64,11 @@ export function useStationGate({
     playerRef.current = { tunedIn, tune };
   }, [tunedIn, tune]);
   const lastCheckRef = useRef(0);
-  // A check answers for the station it was asked about. A late answer after a
-  // station switch must not save or forget anything under the new station.
   const apiRef = useRef(api);
   useEffect(() => {
     apiRef.current = api;
   }, [api]);
 
-  // Once per station visit, and again whenever a lock turns on.
   useEffect(() => {
     if (!required || !api) {
       setPhase('open');
@@ -112,17 +96,10 @@ export function useStationGate({
     };
   }, [required, api]);
 
-  // The listener forgot this station's password on the Station login screen
-  // (#1873): ask again. The updater leaves a phase a station switch set in the
-  // same commit alone; only a password that was in use goes back to the prompt.
   useEffect(() => {
     if (required && !stationPassword) setPhase((p) => (p === 'ok' ? 'prompt' : p));
   }, [required, stationPassword]);
 
-  // Locked out while tuned in (a lock switched on, or the password rotated):
-  // the audio stops with the face, as the web player's does. The right
-  // password tunes that listener back in (gate-resume.ts), so the hold names
-  // the station: this hook outlives a switch, and a switch must drop it.
   const heldForRef = useRef<StationApi | null>(null);
   useEffect(() => {
     const held = gateHolds(heldForRef.current === api, { required, takesAudio: false, phase, tunedIn });
@@ -131,15 +108,13 @@ export function useStationGate({
   }, [required, phase, tunedIn, stop, api]);
 
   // Icecast rejects a stale password silently, as far as the player can tell:
-  // it just keeps reconnecting. Ask the controller whether that is why, for as
-  // long as the player stays stuck (watchStuckPassword).
+  // it just keeps reconnecting.
   useEffect(() => {
     if (!listenerAuth || phase !== 'ok' || !tunedIn || status !== 'connecting' || !api) return;
     let alive = true;
     const cancel = watchStuckPassword({
       check: async () => {
         const password = passwordsRef.current.stationPassword;
-        // None to ask with: forgetting it already brings the prompt up (above).
         if (!password) return 'unavailable';
         lastCheckRef.current = Date.now();
         return api.checkStationAuth(password);
@@ -148,12 +123,6 @@ export function useStationGate({
       heldUntil: () => api.stationAuthHeldUntil(),
       current: () => apiRef.current === api,
       onDenied: () => {
-        // Before forgetting it, which already brings the prompt up (above).
-        // Not held back by `alive`: a stop while the check was out re-runs
-        // this effect, and the prompt it leads to must still say why. The
-        // `current` check keeps it to the station that was asked; after a
-        // switch, the next station's visit check clears it, and a station
-        // with no lock never shows the prompt that carries it.
         setSavedRejected(true);
         void storeRef.current.forgetStationPassword().then(() => {
           if (alive) setPhase('prompt');
@@ -177,8 +146,6 @@ export function useStationGate({
         setSavedRejected(false);
         const resume = resumeOnAnswer(heldForRef.current === api, result);
         setPhase('ok');
-        // The password is already in the ref the stream URL reads, and tune()
-        // toggles, so it never runs for a listener already on air.
         if (resume && !playerRef.current.tunedIn) playerRef.current.tune();
       }
       return result;

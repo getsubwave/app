@@ -1,8 +1,3 @@
-// Use dismissTo to return to the existing player; replace stacks a second
-// player inside the modal. The config-seeded featured station cannot be removed,
-// but every saved station, the featured and tuned-in ones included, can have its
-// Station login edited (#1873).
-
 import { router } from 'expo-router';
 import { ChevronRight, KeyRound, Trash2, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
@@ -78,12 +73,10 @@ export default function Stations() {
   const editLogin = (st: StationRef) =>
     router.push({ pathname: '/station-login', params: { url: st.url, name: st.name } });
 
-  // Check station health in onboarding before tuning in.
   const discover = (st: DirectoryStation) =>
     router.push({ pathname: '/onboarding', params: { url: st.url, name: st.name } });
 
   const currentUrl = base;
-  // If an active station was forgotten, use its host as the display name.
   const currentName =
     name || (currentUrl === featured.url ? featured.name : stripProto(currentUrl ?? ''));
   const others: StationRef[] = [featured, ...recents].filter(

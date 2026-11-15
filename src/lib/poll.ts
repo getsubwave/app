@@ -1,4 +1,3 @@
-// The API client owns request timeouts. This owns cadence and cancellation.
 export function pollAsync(
   fn: (signal: AbortSignal) => Promise<void>,
   intervalMs: number,
@@ -11,7 +10,6 @@ export function pollAsync(
     try {
       await fn(controller.signal);
     } catch {
-      // Transient failures retry on the next tick.
     } finally {
       inFlight = false;
     }
