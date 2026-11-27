@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { onNowShow, personaBlurbs, personaById } from '../src/lib/schedule.ts';
+import { onNowShow, personaBlurbs, personaById, showBlurb } from '../src/lib/schedule.ts';
 import type { SchedulePersona, ScheduleShow } from '../src/lib/types.ts';
 
 const show = (id: string, name: string, topic = ''): ScheduleShow => ({
@@ -51,4 +51,14 @@ test('the host is found by id', () => {
   assert.equal(personaById(personas, 'p_missing'), null);
   assert.equal(personaById(personas, undefined), null);
   assert.equal(personaById(undefined, 'p_a'), null);
+});
+
+test('a show reads its listener description, falling back to the DJ topic (#8)', () => {
+  assert.equal(showBlurb({ ...deepNight, description: '  Slow music after midnight.  ' }), 'Slow music after midnight.');
+  assert.equal(showBlurb({ ...deepNight, description: '' }), 'Ambient textures for the sleepless.');
+  assert.equal(showBlurb({ ...deepNight, description: '   ' }), 'Ambient textures for the sleepless.');
+  assert.equal(showBlurb(deepNight), 'Ambient textures for the sleepless.', 'an older controller omits the key');
+  assert.equal(showBlurb(show('s_x', 'Bare')), '');
+  assert.equal(showBlurb(null), '');
+  assert.equal(showBlurb({ description: 42 as unknown as string, topic: 'Fallback.' }), 'Fallback.');
 });
