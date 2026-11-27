@@ -36,6 +36,7 @@ import { useTrackLike } from '@/hooks/useTrackLike';
 import { useTrackLyrics } from '@/hooks/useTrackLyrics';
 import type { StationApi } from '@/lib/api';
 import type { StationLocale } from '@/lib/format';
+import { column, PLAYER_MAX_WIDTH } from '@/lib/layout';
 import {
   LYRICS_LAYOUT_HOLD_MS,
   LYRICS_MIN_SCREEN_HEIGHT,
@@ -326,18 +327,30 @@ export default function PlayerScreen() {
   const activeRef = useRef(HOME_INDEX);
   const [scrollX] = useState(() => new Animated.Value(0));
   const didInit = useRef(false);
+  // A rotation or a Split View resize changes the page width under a scroll
+  // offset measured in the old one, so the pager re-snaps to the page it was
+  // on, and scroll events in between don't pick a page from the stale offset.
+  const resnapRef = useRef<number | null>(null);
 
   const onPagerLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
-    if (w > 0 && w !== pagerW) setPagerW(w);
+    if (w > 0 && w !== pagerW) {
+      if (pagerW > 0) resnapRef.current = activeRef.current;
+      setPagerW(w);
+    }
   };
 
   useEffect(() => {
-    if (pagerW > 0 && !didInit.current) {
-      didInit.current = true;
-      scrollX.setValue(HOME_INDEX * pagerW);
-      requestAnimationFrame(() => pagerRef.current?.scrollTo({ x: HOME_INDEX * pagerW, animated: false }));
-    }
+    if (pagerW <= 0) return;
+    const idx = resnapRef.current ?? (didInit.current ? activeRef.current : HOME_INDEX);
+    didInit.current = true;
+    const x = idx * pagerW;
+    scrollX.setValue(x);
+    const raf = requestAnimationFrame(() => {
+      pagerRef.current?.scrollTo({ x, animated: false });
+      resnapRef.current = null;
+    });
+    return () => cancelAnimationFrame(raf);
   }, [pagerW, scrollX]);
 
   const onPagerScroll = useMemo(
@@ -346,7 +359,7 @@ export default function PlayerScreen() {
       Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
         useNativeDriver: true,
         listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-          if (pagerW <= 0) return;
+          if (pagerW <= 0 || resnapRef.current != null) return;
           const idx = Math.max(
             0,
             Math.min(PAGES.length - 1, Math.round(e.nativeEvent.contentOffset.x / pagerW)),
@@ -483,7 +496,7 @@ export default function PlayerScreen() {
                 />
               </View>
               <View style={{ width: pagerW }}>
-                <View style={{ flex: 1, paddingTop: headerInset, paddingBottom: barInset }}>
+                <View style={[column(PLAYER_MAX_WIDTH), { flex: 1, paddingTop: headerInset, paddingBottom: barInset }]}>
                   <CenterStage
                     nowPlaying={nowPlaying}
                     coverSrc={coverSrc}
@@ -558,20 +571,22 @@ export default function PlayerScreen() {
           style={{ position: 'absolute', left: 0, right: 0, bottom: 0 }}
           onLayout={onBarLayout}
         >
-          <TransportBar
-            tunedIn={tunedIn}
-            status={status}
-            onTune={tune}
-            offline={offline}
-            volume={volume}
-            setVolume={setVolume}
-            muted={muted}
-            onToggleMute={toggleMute}
-            latencyMs={signal.latencyMs}
-            signalQuality={signal.quality}
-            listeners={listenerCount}
-            castingTo={cast.deviceName}
-          />
+          <View style={column(PLAYER_MAX_WIDTH)}>
+            <TransportBar
+              tunedIn={tunedIn}
+              status={status}
+              onTune={tune}
+              offline={offline}
+              volume={volume}
+              setVolume={setVolume}
+              muted={muted}
+              onToggleMute={toggleMute}
+              latencyMs={signal.latencyMs}
+              signalQuality={signal.quality}
+              listeners={listenerCount}
+              castingTo={cast.deviceName}
+            />
+          </View>
         </View>
       </SafeAreaView>
 

@@ -28,6 +28,7 @@ import {
 } from '@/lib/station-credentials';
 import { isInsecureBase } from '@/lib/insecure-base';
 import { useTheme } from '@/theme/ThemeContext';
+import { column, FORM_MAX_WIDTH } from '@/lib/layout';
 
 const PROBE_TIMEOUT_MS = 4500;
 const STEPS = ['Resolving host', 'Controller · /health', 'Icecast · /stream', 'DJ booth · LLM link'];
@@ -325,7 +326,7 @@ export default function Onboarding() {
     <SafeAreaView className="flex-1 bg-bg">
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 32 }}
+          contentContainerStyle={{ ...column(FORM_MAX_WIDTH + 56), flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 32 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

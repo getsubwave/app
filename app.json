@@ -16,7 +16,7 @@
       "fallbackToCacheTimeout": 0
     },
     "ios": {
-      "supportsTablet": false,
+      "supportsTablet": true,
       "bundleIdentifier": "com.getsubwave.app",
       "appleTeamId": "BU9RD766GN",
       "entitlements": {
@@ -24,6 +24,12 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
         "NSSupportsLiveActivities": true,
         "NSLocalNetworkUsageDescription": "SUB/WAVE uses the local network to find Google Cast speakers and TVs on your Wi-Fi so you can send the station to them.",
         "UIBackgroundModes": [

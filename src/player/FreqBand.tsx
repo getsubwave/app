@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from 'react';
 import { Animated, type LayoutChangeEvent, Pressable, Text, View } from 'react-native';
+import { column, PLAYER_MAX_WIDTH } from '@/lib/layout';
 import { useTheme } from '@/theme/ThemeContext';
 
 export interface BandStop {
@@ -49,7 +50,7 @@ function FreqBand({ pages, active, scrollX, maxScroll, onPick }: FreqBandProps) 
         zIndex: 30,
       }}
     >
-      <View style={{ position: 'relative', height: 30 }} onLayout={onLayout}>
+      <View style={[column(PLAYER_MAX_WIDTH - 28), { position: 'relative', height: 30 }]} onLayout={onLayout}>
         <View
           pointerEvents="none"
           style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 13, flexDirection: 'row', justifyContent: 'space-between' }}
@@ -71,7 +72,10 @@ function FreqBand({ pages, active, scrollX, maxScroll, onPick }: FreqBandProps) 
         </View>
 
         {needleX ? (
+          // Keyed on its geometry: a native-driven view keeps the old
+          // interpolation after a rotation until the scroll value moves again.
           <Animated.View
+            key={`${bandW}:${maxScroll}`}
             pointerEvents="none"
             style={{
               position: 'absolute',

@@ -10,6 +10,7 @@ import { normalizeBase } from '@/lib/api';
 import { fetchDirectory, type DirectoryStation } from '@/lib/directory';
 import type { StationRef } from '@/lib/station';
 import { useTheme } from '@/theme/ThemeContext';
+import { column, FORM_MAX_WIDTH } from '@/lib/layout';
 
 const stripProto = (u: string) => u.replace(/^https?:\/\//, '');
 
@@ -100,7 +101,7 @@ export default function Stations() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-row items-center justify-between px-5 pt-4 pb-1">
+      <View className="flex-row items-center justify-between px-5 pt-4 pb-1" style={column(FORM_MAX_WIDTH + 40)}>
         <Text className="font-display text-ink" style={{ fontSize: 24 }}>
           Stations
         </Text>
@@ -109,7 +110,7 @@ export default function Stations() {
         </Pressable>
       </View>
 
-      <ScrollView className="flex-1 px-5" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+      <ScrollView className="flex-1 px-5" contentContainerStyle={{ ...column(FORM_MAX_WIDTH), paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         {currentUrl ? (
           <>
             <Divider>Tuned in</Divider>

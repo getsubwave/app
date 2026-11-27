@@ -3,6 +3,7 @@
 
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ALL_ORIENTATIONS, column, SHEET_MAX_WIDTH } from '@/lib/layout';
 import { useTheme } from '@/theme/ThemeContext';
 
 export interface SheetProps {
@@ -22,6 +23,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      supportedOrientations={ALL_ORIENTATIONS}
       statusBarTranslucent
       navigationBarTranslucent
     >
@@ -34,6 +36,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
         />
         <View
           style={{
+            ...column(SHEET_MAX_WIDTH),
             maxHeight: '88%',
             backgroundColor: colors.bg,
             borderTopLeftRadius: 16,

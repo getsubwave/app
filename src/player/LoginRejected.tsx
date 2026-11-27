@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/theme/ThemeContext';
+import { CARD_MAX_WIDTH, column } from '@/lib/layout';
 
 export interface LoginRejectedProps {
   base: string;
@@ -31,7 +32,7 @@ export default function LoginRejected({ base, stationName, recheck }: LoginRejec
       />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg, opacity: 0.8 }]} />
       <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
-        <View style={{ borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.bg, padding: 22 }}>
+        <View style={{ ...column(CARD_MAX_WIDTH), borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.bg, padding: 22 }}>
           <Text className="font-mono text-muted" style={{ fontSize: 10, letterSpacing: 2.2, textTransform: 'uppercase' }}>
             station login
           </Text>

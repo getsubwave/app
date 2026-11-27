@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import type { StationAuthResult } from '@/lib/station-password';
 import { useTheme } from '@/theme/ThemeContext';
+import { CARD_MAX_WIDTH, column } from '@/lib/layout';
 
 const FAILURE_COPY: Record<Exclude<StationAuthResult, 'ok'>, string> = {
   denied: 'That password was not accepted.',
@@ -71,7 +72,7 @@ export default function StationGate({ checking, solid, stationName, savedRejecte
         {checking ? (
           <ActivityIndicator color={colors.accent} accessibilityLabel="Checking the station password" />
         ) : (
-          <View style={{ borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.bg, padding: 22 }}>
+          <View style={{ ...column(CARD_MAX_WIDTH), borderWidth: 1, borderColor: colors.ink, backgroundColor: colors.bg, padding: 22 }}>
             <Text className="font-mono text-muted" style={{ fontSize: 10, letterSpacing: 2.2, textTransform: 'uppercase' }}>
               members only
             </Text>
