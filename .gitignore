@@ -43,6 +43,9 @@ secrets/
 /ios
 /android
 
+# Gradle output of local Expo modules
+/modules/*/android/build/
+
 # local EAS build output (eas build --local --output)
 /build/
 

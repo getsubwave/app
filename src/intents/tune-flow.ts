@@ -11,7 +11,7 @@
 
 import type { IntentReply } from '../../modules/app-intents';
 import { splitStationAddress, type StoredStationRef } from '../lib/station-credentials';
-import { findSavedStation } from '../lib/station-store';
+import { findSavedStation, matchStations, stationsForSiri } from '../lib/station-store';
 import { NO_STATION_MESSAGE } from './station-messages';
 
 export const NOT_SAVED_MESSAGE = "That station isn't saved in SUB/WAVE. Add it in the app first.";
@@ -83,6 +83,19 @@ export async function tuneIn(
     station.name,
     await deps.startAndWait(() => load(deps, station.load), deadline),
   );
+}
+
+/** A station asked for by name ("Hey Google, play Night Shift on SUB/WAVE"),
+ *  matched as Siri matches one. No name, or none that matches, tunes in to
+ *  the station listened to last. The same routing as tuneIn. */
+export async function tuneInByName(
+  deps: TuneDeps,
+  query: string,
+  deadline: number,
+): Promise<IntentReply> {
+  const store = await deps.loadStore();
+  const [match] = matchStations(stationsForSiri(store.recents), query);
+  return tuneIn(deps, match?.id, deadline);
 }
 
 /** Through the mounted player when there is one, else directly. */

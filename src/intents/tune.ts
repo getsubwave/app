@@ -74,6 +74,12 @@ export function tuneIn(stationId: string | undefined, deadline: number): Promise
   return flow.tuneIn(deps, stationId, deadline);
 }
 
+/** A station asked for by name ("Hey Google, play Night Shift on SUB/WAVE"),
+ *  as Siri matches one (tune-flow.ts). */
+export function tuneInByName(query: string, deadline: number): Promise<IntentReply> {
+  return flow.tuneInByName(deps, query, deadline);
+}
+
 export function tuneOut(): Promise<IntentReply> {
   return flow.tuneOut(deps);
 }

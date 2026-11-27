@@ -3,6 +3,10 @@
 import TrackPlayer, { Event } from 'react-native-track-player';
 import { getLastLiveMeta, loadAndPlay } from '@/audio/player';
 import { remotePlay } from '@/lib/remote-play';
+import { tuneIn, tuneInByName } from '@/intents/tune';
+
+// A car's pick has no Siri reply window: as long as a tune-in waits for audio.
+const CAR_PICK_BUDGET_MS = 10_000;
 
 export async function PlaybackService(): Promise<void> {
   // RemotePlay reloads with a cache-buster to discard the paused buffer,
@@ -21,6 +25,15 @@ export async function PlaybackService(): Promise<void> {
   );
   TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
   TrackPlayer.addEventListener(Event.RemoteStop, () => TrackPlayer.stop());
+
+  // Android Auto: a station picked from the car's list (its id is the
+  // station's base), or asked for by voice. The tune-in Siri uses.
+  TrackPlayer.addEventListener(Event.RemotePlayId, ({ id }) => {
+    tuneIn(id, Date.now() + CAR_PICK_BUDGET_MS).catch(() => {});
+  });
+  TrackPlayer.addEventListener(Event.RemotePlaySearch, ({ query }) => {
+    tuneInByName(query, Date.now() + CAR_PICK_BUDGET_MS).catch(() => {});
+  });
 
   // Never settle. On Android this is a headless JS task, and RN fires JS timers
   // behind a paused activity only while one is running — the feed poll that
