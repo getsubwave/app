@@ -12,6 +12,16 @@ import Foundation
 // widget extension nothing is listening and `perform` fails after the ack
 // window.
 
+/// What an intent asks JS to do, matched by STRING with `IntentAction` in
+/// modules/app-intents/index.ts and the switch in src/intents/handlers.ts.
+enum SubwaveIntentAction: String {
+  case tuneIn
+  case tuneOut
+  case request
+  case nowPlaying
+  case like
+}
+
 @available(iOS 17.0, *)
 enum SubwaveIntentBridge {
   private static let requestName = Notification.Name("SubwaveIntentRequest")
@@ -29,7 +39,9 @@ enum SubwaveIntentBridge {
   /// any; throws the message JS gave for a failure, or a generic one when the
   /// app never answered.
   @discardableResult
-  static func perform(_ action: String, _ args: [String: String] = [:]) async throws -> String? {
+  static func perform(
+    _ action: SubwaveIntentAction, _ args: [String: String] = [:]
+  ) async throws -> String? {
     let token = UUID().uuidString
     let box = ReplyBox()
     let center = NotificationCenter.default
@@ -48,6 +60,9 @@ enum SubwaveIntentBridge {
     }
 
     let started = Date()
+    // Sent with the request so JS cuts its waits to fit (src/intents/deadline.ts):
+    // an answer after this is never heard, and Siri says the app didn't respond.
+    let deadline = started.addingTimeInterval(replyWindow).timeIntervalSince1970 * 1000
     while true {
       if let reply = box.reply {
         guard reply.ok else { throw SubwaveIntentError(reply.message) }
@@ -60,7 +75,9 @@ enum SubwaveIntentBridge {
       if !box.acked {
         center.post(
           name: requestName, object: nil,
-          userInfo: ["token": token, "action": action, "args": args])
+          userInfo: [
+            "token": token, "action": action.rawValue, "args": args, "deadline": deadline,
+          ])
       }
       try await Task.sleep(nanoseconds: 200_000_000)
     }

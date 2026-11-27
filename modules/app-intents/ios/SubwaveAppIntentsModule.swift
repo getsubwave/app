@@ -43,8 +43,10 @@ public class SubwaveAppIntentsModule: Module {
   private var listening = false
   private var pending: [[String: Any]] = []
   /// Tokens already taken in. The intent re-posts until it sees an ack, so a
-  /// request can arrive more than once.
-  private var seen = Set<String>()
+  /// request can arrive more than once; only the latest few can still be
+  /// re-posting, so older ones are dropped.
+  private var seen: [String] = []
+  private let seenCap = 32
 
   public func definition() -> ModuleDefinition {
     Name("SubwaveAppIntents")
@@ -121,9 +123,13 @@ public class SubwaveAppIntentsModule: Module {
       let action = info?["action"] as? String
     else { return }
     NotificationCenter.default.post(name: ackName, object: nil, userInfo: ["token": token])
-    guard seen.insert(token).inserted else { return }
+    guard !seen.contains(token) else { return }
+    seen.append(token)
+    if seen.count > seenCap { seen.removeFirst(seen.count - seenCap) }
     let args = info?["args"] as? [String: String] ?? [:]
-    let request: [String: Any] = ["token": token, "action": action, "args": args]
+    var request: [String: Any] = ["token": token, "action": action, "args": args]
+    // When the intent stops waiting, in epoch ms (src/intents/deadline.ts).
+    if let deadline = info?["deadline"] as? Double { request["deadline"] = deadline }
     if listening {
       sendEvent("onIntent", request)
     } else {

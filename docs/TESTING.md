@@ -355,7 +355,9 @@ a toggle for Control Center, the Lock Screen and the Action button, driven by
 `ToggleTuneIntent` through the same bridge. **Request a song** ("Request a song
 on SUB/WAVE") has Siri ask what to play, sends it through the request drawer's
 own `POST /request` and polling, and reads back the DJ's answer. It waits up to
-10 s for the match, then says the request is in. **What's playing** and **Like
+10 s for the match, less when the bridge's deadline is nearer, then says the
+request is in; a POST still unanswered at the deadline is said as sent too,
+since "try again" would queue it twice. **What's playing** and **Like
 this song** both mean the track the listener is hearing: while the app is
 playing, that is the previous track for the stream buffer's length after a
 change (`src/lib/heard-track.ts`, the rule `useStationFeed` promotes tracks by).

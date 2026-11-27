@@ -6,6 +6,7 @@
 import type { IntentReply } from '../../modules/app-intents';
 import type { StationApi } from '../lib/api';
 import { requestResultLabel } from '../lib/request-outcome';
+import { timeLeft, TIMED_OUT, within } from './deadline';
 import type { RequestResult } from '../lib/types';
 
 // How long Siri is kept waiting for the DJ to match the request. Matching is
@@ -18,27 +19,46 @@ const POLL_INTERVAL_MS = 1500;
 // The drawer's own line for a request still being matched.
 export const ACCEPTED_MESSAGE = 'Got it — taking it to the booth.';
 
+// Said when the station hasn't answered the POST by the deadline. It may well
+// have taken the request, so this is no error: Siri saying "try again" would
+// send it twice.
+export const SLOW_MESSAGE = "Sent. The station's slow to answer, so it may take a moment.";
+
 export interface AskForSongDeps {
   api: Pick<StationApi, 'postRequest' | 'pollRequest'>;
   sleep?: (ms: number) => Promise<void>;
+  /** The timer the deadline races the station's answers against; apart from
+   *  `sleep` so a test's clock moves only on the polling interval. */
+  timer?: (ms: number) => Promise<void>;
   now?: () => number;
   waitMs?: number;
+  /** Epoch ms by which Siri must have its answer (src/intents/deadline.ts).
+   *  Every wait, the POST and each poll included, is cut to it. */
+  deadline?: number;
 }
 
 export async function askForSong(text: string, deps: AskForSongDeps): Promise<IntentReply> {
   const asked = text.trim();
   if (!asked) return { ok: false, message: 'Tell me a song, an artist or a mood.' };
-  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  const sleep = deps.sleep ?? realSleep;
+  const timer = deps.timer ?? realSleep;
   const now = deps.now ?? Date.now;
 
   // A refusal is answered in the station's words: requests closed, nobody
   // tuned in, a rate limit, a full queue. A 400 carries `error`, not `message`.
-  let posted: RequestResult & { error?: string };
+  const end = deps.deadline ?? Number.POSITIVE_INFINITY;
+  const untilEnd = () => timer(timeLeft(end, now()));
+
+  let posted: (RequestResult & { error?: string }) | typeof TIMED_OUT;
   try {
-    posted = await deps.api.postRequest({ text: asked });
+    posted = Number.isFinite(end)
+      ? await within(deps.api.postRequest({ text: asked }), untilEnd())
+      : await deps.api.postRequest({ text: asked });
   } catch {
     return { ok: false, message: "Couldn't reach the station. Check your connection and try again." };
   }
+  if (posted === TIMED_OUT) return { ok: true, message: SLOW_MESSAGE };
   if (!posted.success) {
     return {
       ok: false,
@@ -47,12 +67,18 @@ export async function askForSong(text: string, deps: AskForSongDeps): Promise<In
   }
   if (!posted.requestId) return { ok: true, message: ACCEPTED_MESSAGE };
 
-  const deadline = now() + (deps.waitMs ?? REQUEST_WAIT_MS);
-  while (now() < deadline) {
+  const requestId = posted.requestId;
+  // A poll needs time to come back, so the last one starts an interval early.
+  const pollUntil = Math.min(now() + (deps.waitMs ?? REQUEST_WAIT_MS), end - POLL_INTERVAL_MS);
+  while (now() < pollUntil) {
     await sleep(POLL_INTERVAL_MS);
     let data: RequestResult | null;
     try {
-      data = await deps.api.pollRequest(posted.requestId);
+      const polled = Number.isFinite(end)
+        ? await within(deps.api.pollRequest(requestId), untilEnd())
+        : await deps.api.pollRequest(requestId);
+      if (polled === TIMED_OUT) break;
+      data = polled;
     } catch {
       data = null;
     }

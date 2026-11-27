@@ -175,7 +175,7 @@ struct PlayStationAudioIntent: AudioPlaybackIntent, LiveActivityIntent {
     switch audioEntity {
     case .liveRadioStation(let station):
       let args = station.id == LiveStationEntity.noStationID ? [:] : ["station": station.id]
-      try await SubwaveIntentBridge.perform("tuneIn", args)
+      try await SubwaveIntentBridge.perform(.tuneIn, args)
     }
     return .result()
   }

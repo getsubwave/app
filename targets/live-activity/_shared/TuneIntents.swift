@@ -34,7 +34,7 @@ struct TuneInIntent: AudioPlaybackIntent, LiveActivityIntent {
   var station: StationEntity?
 
   func perform() async throws -> some IntentResult {
-    try await SubwaveIntentBridge.perform("tuneIn", station.map { ["station": $0.id] } ?? [:])
+    try await SubwaveIntentBridge.perform(.tuneIn, station.map { ["station": $0.id] } ?? [:])
     return .result()
   }
 }
@@ -46,7 +46,7 @@ struct TuneOutIntent: AudioPlaybackIntent {
   static var openAppWhenRun: Bool = false
 
   func perform() async throws -> some IntentResult {
-    try await SubwaveIntentBridge.perform("tuneOut")
+    try await SubwaveIntentBridge.perform(.tuneOut)
     return .result()
   }
 }

@@ -23,7 +23,7 @@ export function registerIntentHandlers(): void {
       case 'like': {
         const station = await activeStation();
         if (!station) return { ok: false, message: NO_STATION_MESSAGE };
-        if (action === 'request') return askForSong(args.text ?? '', { api: station.api });
+        if (action === 'request') return askForSong(args.text ?? '', { api: station.api, deadline });
         if (action === 'nowPlaying') return whatsPlaying(station);
         return likeHeardTrack(station);
       }

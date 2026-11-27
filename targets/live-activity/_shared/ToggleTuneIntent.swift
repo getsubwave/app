@@ -25,7 +25,7 @@ struct ToggleTuneIntent: SetValueIntent, AudioPlaybackIntent, LiveActivityIntent
   }
 
   func perform() async throws -> some IntentResult {
-    try await SubwaveIntentBridge.perform(value ? "tuneIn" : "tuneOut")
+    try await SubwaveIntentBridge.perform(value ? .tuneIn : .tuneOut)
     return .result()
   }
 }

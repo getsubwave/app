@@ -8,6 +8,7 @@ import {
   ACCEPTED_MESSAGE,
   askForSong,
   REQUEST_WAIT_MS,
+  SLOW_MESSAGE,
   spokenAnswer,
 } from '../src/intents/request-reply.ts';
 import type { RequestResult } from '../src/lib/types.ts';
@@ -114,4 +115,29 @@ test('an empty request never reaches the station', async () => {
   const reply = await askForSong('   ', s.deps);
   assert.equal(reply.ok, false);
   assert.deepEqual(s.sent, []);
+});
+
+test('a POST still unanswered at the deadline is said as sent, not as a failure', async () => {
+  // Siri saying "try again" would send it twice.
+  const s = station(accepted);
+  s.deps.api.postRequest = () => new Promise(() => {});
+  const reply = await askForSong('anything', { ...s.deps, deadline: 5000, timer: async () => {} });
+  assert.deepEqual(reply, { ok: true, message: SLOW_MESSAGE });
+  assert.equal(s.pollCount, 0);
+});
+
+test('polling stops an interval before the deadline, well inside the cap', async () => {
+  const s = station(accepted, [{ success: false, status: 'pending' }]);
+  const never = () => new Promise<void>(() => {});
+  const reply = await askForSong('something slow', { ...s.deps, deadline: 4000, timer: never });
+  assert.deepEqual(reply, { ok: true, message: ACCEPTED_MESSAGE });
+  // 1.5 s apart, stopping at 4000 - 1500: polls at 1500 and 3000, none after.
+  assert.equal(s.pollCount, 2);
+});
+
+test('a poll still out at the deadline ends the wait with the request in', async () => {
+  const s = station(accepted);
+  s.deps.api.pollRequest = () => new Promise(() => {});
+  const reply = await askForSong('anything', { ...s.deps, deadline: 9000, timer: async () => {} });
+  assert.deepEqual(reply, { ok: true, message: ACCEPTED_MESSAGE });
 });

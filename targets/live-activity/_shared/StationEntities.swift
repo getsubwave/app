@@ -113,7 +113,7 @@ struct OpenStationIntent: OpenIntent {
   var target: StationEntity
 
   func perform() async throws -> some IntentResult {
-    try await SubwaveIntentBridge.perform("tuneIn", ["station": target.id])
+    try await SubwaveIntentBridge.perform(.tuneIn, ["station": target.id])
     return .result()
   }
 }

@@ -18,7 +18,7 @@ struct WhatsPlayingIntent: AppIntent {
   static var openAppWhenRun: Bool = false
 
   func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<String> {
-    let answer = try await SubwaveIntentBridge.perform("nowPlaying") ?? ""
+    let answer = try await SubwaveIntentBridge.perform(.nowPlaying) ?? ""
     return .result(value: answer, dialog: IntentDialog(stringLiteral: answer))
   }
 }
@@ -35,7 +35,7 @@ struct LikeSongIntent: AppIntent {
   static var openAppWhenRun: Bool = false
 
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    let answer = try await SubwaveIntentBridge.perform("like") ?? "Liked."
+    let answer = try await SubwaveIntentBridge.perform(.like) ?? "Liked."
     return .result(dialog: IntentDialog(stringLiteral: answer))
   }
 }
