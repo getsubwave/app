@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DiscMark from '@/components/DiscMark';
+import { column, PLAYER_MAX_WIDTH } from '@/lib/layout';
 import { buildTagline } from '@/lib/tagline';
 import type { ActiveShow, StationContext } from '@/lib/types';
 import { useTheme } from '@/theme/ThemeContext';
@@ -38,63 +39,65 @@ export default function TopBar({
       style={{ paddingTop: insets.top + 8, borderBottomWidth: 1, borderBottomColor: colors.softBorder }}
       className="px-5 pb-3"
     >
-      <View className="flex-row items-center justify-between">
-        <Pressable
-          onPress={() => router.push('/stations')}
-          accessibilityRole="button"
-          accessibilityLabel="Switch station"
-          className="flex-row items-center"
-          style={{ gap: 8, flex: 1 }}
-        >
-          <DiscMark size={18} spinning={tunedIn} />
-          <Text className="font-mono text-ink" style={{ fontSize: 12, letterSpacing: 2 }} numberOfLines={1}>
-            {(stationName?.trim() || 'SUB/WAVE').toUpperCase()}
-          </Text>
-          <Text className="font-mono text-muted" style={{ fontSize: 12 }}>⌄</Text>
-          {showName ? (
-            <Text className="font-mono text-ink" style={{ fontSize: 10, letterSpacing: 1.4, flexShrink: 1, marginLeft: 2, opacity: 0.9 }} numberOfLines={1}>
-              ▸ {showName.toUpperCase()}
-            </Text>
-          ) : null}
-          {onAirName ? (
-            <Text className="font-mono text-accent" style={{ fontSize: 10, letterSpacing: 1.4 }} numberOfLines={1}>
-              WITH {onAirName.toUpperCase()}
-            </Text>
-          ) : null}
-        </Pressable>
-        <View className="flex-row items-center" style={{ paddingLeft: 12 }}>
+      <View style={column(PLAYER_MAX_WIDTH - 40)}>
+        <View className="flex-row items-center justify-between">
           <Pressable
-            onPress={onOpenPanel}
-            hitSlop={10}
+            onPress={() => router.push('/stations')}
             accessibilityRole="button"
-            accessibilityLabel={panelActive ? 'Back panel (active)' : 'Back panel'}
-            accessibilityState={{ selected: panelActive }}
+            accessibilityLabel="Switch station"
+            className="flex-row items-center"
+            style={{ gap: 8, flex: 1 }}
           >
-            <View>
-              <SlidersHorizontal size={18} color={panelActive ? colors.accent : colors.muted} />
-              {panelActive ? (
-                <View
-                  style={{
-                    position: 'absolute',
-                    top: -2,
-                    right: -4,
-                    width: 5,
-                    height: 5,
-                    borderRadius: 2.5,
-                    backgroundColor: colors.accent,
-                  }}
-                />
-              ) : null}
-            </View>
+            <DiscMark size={18} spinning={tunedIn} />
+            <Text className="font-mono text-ink" style={{ fontSize: 12, letterSpacing: 2 }} numberOfLines={1}>
+              {(stationName?.trim() || 'SUB/WAVE').toUpperCase()}
+            </Text>
+            <Text className="font-mono text-muted" style={{ fontSize: 12 }}>⌄</Text>
+            {showName ? (
+              <Text className="font-mono text-ink" style={{ fontSize: 10, letterSpacing: 1.4, flexShrink: 1, marginLeft: 2, opacity: 0.9 }} numberOfLines={1}>
+                ▸ {showName.toUpperCase()}
+              </Text>
+            ) : null}
+            {onAirName ? (
+              <Text className="font-mono text-accent" style={{ fontSize: 10, letterSpacing: 1.4 }} numberOfLines={1}>
+                WITH {onAirName.toUpperCase()}
+              </Text>
+            ) : null}
           </Pressable>
+          <View className="flex-row items-center" style={{ paddingLeft: 12 }}>
+            <Pressable
+              onPress={onOpenPanel}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={panelActive ? 'Back panel (active)' : 'Back panel'}
+              accessibilityState={{ selected: panelActive }}
+            >
+              <View>
+                <SlidersHorizontal size={18} color={panelActive ? colors.accent : colors.muted} />
+                {panelActive ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      top: -2,
+                      right: -4,
+                      width: 5,
+                      height: 5,
+                      borderRadius: 2.5,
+                      backgroundColor: colors.accent,
+                    }}
+                  />
+                ) : null}
+              </View>
+            </Pressable>
+          </View>
         </View>
-      </View>
 
-      {tagline ? (
-        <Text className="font-mono text-muted mt-1.5" style={{ fontSize: 11 }} numberOfLines={1}>
-          {tagline}
-        </Text>
-      ) : null}
+        {tagline ? (
+          <Text className="font-mono text-muted mt-1.5" style={{ fontSize: 11 }} numberOfLines={1}>
+            {tagline}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }

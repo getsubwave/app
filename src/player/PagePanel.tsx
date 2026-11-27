@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { column, PLAYER_MAX_WIDTH } from '@/lib/layout';
 import { useTheme } from '@/theme/ThemeContext';
 
 export interface PagePanelProps {
@@ -19,6 +20,7 @@ export default function PagePanel({ title, sub, children, topInset, bottomInset 
     <ScrollView
       style={{ flex: 1 }}
       contentContainerStyle={{
+        ...column(PLAYER_MAX_WIDTH),
         paddingHorizontal: 16,
         paddingTop: (topInset || insets.top) + 18,
         paddingBottom: (bottomInset || insets.bottom) + 18,

@@ -234,6 +234,30 @@ stream in the phone app first, then connect the car. RNTP feeds the iOS surface
 > path, no manifest declaration). Revisit only if Google's policy changes **and**
 > a compliant `MediaBrowserService` browse tree is added.
 
+### iPad — every orientation, Split View, Stage Manager
+
+The app is a native iPad app (`ios.supportsTablet`). iPhone stays portrait-only
+(`orientation`), while iPad takes every orientation through
+`UISupportedInterfaceOrientations~ipad`, which Apple needs for multitasking.
+Both are native, so changing either ships only in a new binary.
+
+- **The layout keys on window width, never the device** (`src/lib/layout.ts`).
+  A Split View or Stage Manager window can be phone-narrow, so at 700 pt and up
+  the player switches to its wide sizing (bigger cover and type), and every
+  screen keeps its content in a centred column.
+- **The pager re-snaps when its width changes.** A rotation or window resize
+  leaves the scroll offset measured in the old page width, so
+  `PlayerScreen` returns to the page it was on.
+- **Every `Modal` passes `supportedOrientations={ALL_ORIENTATIONS}`.** RN's
+  Modal defaults to portrait only, which rotates or breaks a sheet opened in
+  landscape on iPad.
+- **No Live Activity on iPad.** iPadOS reports `areActivitiesEnabled` false, and
+  `isSupported` already reads that.
+
+Check on an iPad simulator (`npx expo run:ios --device <iPad UDID>`): rotate on
+each pager page (⌘← / ⌘→), open every sheet in landscape, and drag a Split View
+divider through the 700 pt line.
+
 ### Live Activity — Lock Screen, Dynamic Island, Apple Watch (iOS only)
 
 The on-air card. A **widget extension target** (`targets/live-activity/`, wired by

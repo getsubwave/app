@@ -18,6 +18,7 @@ import { createApi, type HealthResult } from '@/lib/api';
 import { splitStationAddress, type StationCredentials } from '@/lib/station-credentials';
 import { checkStationLogin, saveAnywayOffered, type LoginCheck } from '@/lib/station-login';
 import { useTheme } from '@/theme/ThemeContext';
+import { column, FORM_MAX_WIDTH } from '@/lib/layout';
 
 const PROBE_TIMEOUT_MS = 4500;
 const DANGER = '#c5302a';
@@ -215,7 +216,7 @@ export default function StationLogin() {
 
   return (
     <SafeAreaView className="flex-1 bg-bg">
-      <View className="flex-row items-center justify-between px-5 pt-4 pb-1">
+      <View className="flex-row items-center justify-between px-5 pt-4 pb-1" style={column(FORM_MAX_WIDTH + 40)}>
         <Text className="font-display text-ink" style={{ fontSize: 24 }}>
           Station login
         </Text>
@@ -227,7 +228,7 @@ export default function StationLogin() {
       <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           className="flex-1 px-5"
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ ...column(FORM_MAX_WIDTH), paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

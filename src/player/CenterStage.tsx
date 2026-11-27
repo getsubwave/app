@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import CoverArt from './CoverArt';
 import DjThinkingLine from './DjThinkingLine';
 import type { TrackLike } from '@/hooks/useTrackLike';
+import { useWideLayout } from '@/hooks/useWideLayout';
 import { fmtTime } from '@/lib/format';
 import { isDjTurn } from '@/lib/sessionFeed';
 import type { NowPlayingTrack, SessionTurn } from '@/lib/types';
@@ -59,6 +60,7 @@ export default function CenterStage({
   compact = false,
 }: CenterStageProps) {
   const { colors } = useTheme();
+  const wide = useWideLayout();
   const has = !!nowPlaying?.title;
   const duration = nowPlaying?.duration ?? 0;
   const subsonicId = nowPlaying?.subsonic_id ?? null;
@@ -170,18 +172,18 @@ export default function CenterStage({
     return (
       <View className="flex-row items-center px-5" style={{ gap: 14, paddingTop: 12 }}>
         {coverSrc ? (
-          <CoverArt uri={coverSrc} headers={coverHeaders} live={live} burst={burst} size={64} onPress={onOpenTimeline} />
+          <CoverArt uri={coverSrc} headers={coverHeaders} live={live} burst={burst} size={wide ? 88 : 64} onPress={onOpenTimeline} />
         ) : null}
         <View style={{ flex: 1, minWidth: 0 }}>
           {metaRow}
           <Text
             className="font-display text-ink"
-            style={{ fontSize: 20, lineHeight: 24 }}
+            style={{ fontSize: wide ? 24 : 20, lineHeight: wide ? 29 : 24 }}
             numberOfLines={1}
           >
             {nowPlaying?.title}
           </Text>
-          <Text className="font-body-medium text-ink" style={{ fontSize: 14, marginTop: 2 }} numberOfLines={1}>
+          <Text className="font-body-medium text-ink" style={{ fontSize: wide ? 16 : 14, marginTop: 2 }} numberOfLines={1}>
             {nowPlaying?.artist || 'Unknown artist'}
           </Text>
         </View>
@@ -192,8 +194,8 @@ export default function CenterStage({
   return (
     <View className="flex-1 justify-center px-5">
       {coverSrc ? (
-        <View style={{ alignItems: 'flex-start', marginBottom: 14 }}>
-          <CoverArt uri={coverSrc} headers={coverHeaders} live={live} burst={burst} size={120} onPress={onOpenTimeline} />
+        <View style={{ alignItems: 'flex-start', marginBottom: wide ? 22 : 14 }}>
+          <CoverArt uri={coverSrc} headers={coverHeaders} live={live} burst={burst} size={wide ? 220 : 120} onPress={onOpenTimeline} />
         </View>
       ) : null}
 
@@ -201,10 +203,10 @@ export default function CenterStage({
 
       {has ? (
         <>
-          <Text className="font-display text-ink" style={{ fontSize: 26, lineHeight: 30 }}>
+          <Text className="font-display text-ink" style={{ fontSize: wide ? 36 : 26, lineHeight: wide ? 42 : 30 }}>
             {nowPlaying?.title}
           </Text>
-          <Text className="font-body-medium mt-1" style={{ fontSize: 15, color: colors.muted }}>
+          <Text className="font-body-medium mt-1" style={{ fontSize: wide ? 18 : 15, color: colors.muted }}>
             <Text style={{ color: colors.ink }}>{nowPlaying?.artist || 'Unknown artist'}</Text>
             {nowPlaying?.album ? `  ·  ${nowPlaying.album}` : ''}
             {nowPlaying?.year ? `  ·  ${nowPlaying.year}` : ''}
@@ -224,7 +226,7 @@ export default function CenterStage({
           ) : null}
         </>
       ) : (
-        <Text className="font-display text-muted" style={{ fontSize: 26, lineHeight: 30 }}>
+        <Text className="font-display text-muted" style={{ fontSize: wide ? 36 : 26, lineHeight: wide ? 42 : 30 }}>
           scanning the dial_
         </Text>
       )}
