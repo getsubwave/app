@@ -24,7 +24,7 @@ export function registerIntentHandlers(): void {
         const station = await activeStation();
         if (!station) return { ok: false, message: NO_STATION_MESSAGE };
         if (action === 'request') return askForSong(args.text ?? '', { api: station.api, deadline });
-        if (action === 'nowPlaying') return whatsPlaying(station);
+        if (action === 'nowPlaying') return whatsPlaying(station, deadline);
         return likeHeardTrack(station, deadline);
       }
       default:

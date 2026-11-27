@@ -64,7 +64,7 @@ export function likeReply(station: string, track: OnAirTrack, result: LikeResult
 }
 
 /** Said when the station hasn't told us what's on by the deadline: nothing
- *  was sent, so asking again is the whole remedy. */
+ *  was liked, so asking again is the whole remedy. */
 export function slowReply(station: string): IntentReply {
   return { ok: false, message: `${station} is slow to answer. Try again in a moment.` };
 }
@@ -81,13 +81,11 @@ export function likeUnconfirmedReply(station: string): IntentReply {
   };
 }
 
-export interface LikeHeardDeps {
+/** A read of the station on behalf of an intent, cut to its deadline. */
+export interface OnAirDeps {
   station: string;
   /** The track the listener is hearing, read until `signal` aborts. */
   snapshot(signal: AbortSignal): Promise<OnAirSnapshot>;
-  like(songId: string): Promise<LikeResult | null>;
-  /** The in-app heart and the Live Activity follow a like that landed. */
-  announce(like: { songId: string; count?: number }): void;
   /** Epoch ms by which Siri must have its answer (deadline.ts). */
   deadline: number;
   now?: () => number;
@@ -95,24 +93,47 @@ export interface LikeHeardDeps {
   timer?: (ms: number) => Promise<void>;
 }
 
-/** "Like this song": the heard track, liked, both reads cut to the deadline. */
-export async function likeHeard(deps: LikeHeardDeps): Promise<IntentReply> {
-  const now = deps.now ?? Date.now;
-  const timer = deps.timer ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const untilEnd = () => timer(timeLeft(deps.deadline, now()));
+export interface LikeHeardDeps extends OnAirDeps {
+  /** POST /like, sent until `signal` aborts. */
+  like(songId: string, signal: AbortSignal): Promise<LikeResult | null>;
+  /** The in-app heart and the Live Activity follow a like that landed. */
+  announce(like: { songId: string; count?: number }): void;
+}
 
-  // The reads stop at the deadline too (readJson honours the signal), so
-  // nothing keeps fetching for an answer no one will hear.
+const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** `call`'s answer, or TIMED_OUT once the deadline passes first, its request
+ *  aborted then (readJson honours the signal), so nothing keeps fetching for
+ *  an answer no one will hear. */
+function inTime<T>(
+  deps: OnAirDeps,
+  call: (signal: AbortSignal) => Promise<T>,
+): Promise<T | typeof TIMED_OUT> {
+  const now = deps.now ?? Date.now;
+  const timer = deps.timer ?? wait;
   const abort = new AbortController();
-  const snap = await within(deps.snapshot(abort.signal), untilEnd());
-  if (snap === TIMED_OUT) {
-    abort.abort();
-    return slowReply(deps.station);
-  }
+  return within(call(abort.signal), timer(timeLeft(deps.deadline, now()))).then((result) => {
+    if (result === TIMED_OUT) abort.abort();
+    return result;
+  });
+}
+
+/** "What's playing": the heard track, its reads cut to the deadline. */
+export async function whatsPlayingHeard(deps: OnAirDeps): Promise<IntentReply> {
+  const snap = await inTime(deps, deps.snapshot);
+  return snap === TIMED_OUT ? slowReply(deps.station) : whatsPlayingReply(deps.station, snap);
+}
+
+/** "Like this song": the heard track, liked, both steps cut to the deadline. */
+export async function likeHeard(deps: LikeHeardDeps): Promise<IntentReply> {
+  const snap = await inTime(deps, deps.snapshot);
+  if (snap === TIMED_OUT) return slowReply(deps.station);
   const target = likeTarget(deps.station, snap);
   if (!('songId' in target)) return target;
 
-  const result = await within(deps.like(target.songId), untilEnd());
+  // Cancelled at the deadline. The station may still have counted it before
+  // the cancel reached it; the listener's repeat then hears alreadyLiked.
+  const result = await inTime(deps, (signal) => deps.like(target.songId, signal));
   if (result === TIMED_OUT) return likeUnconfirmedReply(deps.station);
   if (result && !result.error && (result.ok || result.alreadyLiked)) {
     deps.announce({ songId: target.songId, count: result.count });

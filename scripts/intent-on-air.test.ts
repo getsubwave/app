@@ -19,6 +19,7 @@ import {
   likeTarget,
   likeUnconfirmedReply,
   slowReply,
+  whatsPlayingHeard,
   whatsPlayingReply,
   type OnAirSnapshot,
 } from '../src/intents/on-air-reply.ts';
@@ -133,10 +134,12 @@ function liking(o: {
 }) {
   const calls: string[] = [];
   const signals: AbortSignal[] = [];
+  const likeSignals: AbortSignal[] = [];
   const announced: string[] = [];
   return {
     calls,
     signals,
+    likeSignals,
     announced,
     run: () =>
       likeHeard({
@@ -146,8 +149,9 @@ function liking(o: {
           const s = o.snapshot === undefined ? snap() : o.snapshot;
           return s ? Promise.resolve(s) : new Promise(() => {});
         },
-        like: (songId) => {
+        like: (songId, signal) => {
           calls.push(songId);
+          likeSignals.push(signal);
           return o.liked === 'never'
             ? new Promise(() => {})
             : Promise.resolve(o.liked === undefined ? { ok: true, count: 3 } : o.liked);
@@ -182,6 +186,67 @@ test('a like still unanswered at the deadline is a failure, to be asked again', 
   assert.deepEqual(reply, likeUnconfirmedReply('SUB/WAVE'));
   assert.equal(reply.ok, false);
   assert.deepEqual(l.announced, []);
+  // The reads answered in time and are left be; the POST is cancelled.
+  assert.equal(l.signals[0]?.aborted, false);
+  assert.equal(l.likeSignals[0]?.aborted, true);
+});
+
+test('a like in time leaves its POST to finish', async () => {
+  const l = liking({});
+  await l.run();
+  assert.equal(l.likeSignals[0]?.aborted, false);
+});
+
+/** What's playing against a station whose reads answer `snapshot`, or never
+ *  when it is null; the deadline's timer fires at once only when `late`. */
+function asking(o: { snapshot?: OnAirSnapshot | null; late?: boolean }) {
+  const signals: AbortSignal[] = [];
+  return {
+    signals,
+    run: () =>
+      whatsPlayingHeard({
+        station: 'SUB/WAVE',
+        snapshot: (signal) => {
+          signals.push(signal);
+          const s = o.snapshot === undefined ? snap() : o.snapshot;
+          return s ? Promise.resolve(s) : new Promise(() => {});
+        },
+        deadline: 10_000,
+        now: () => 0,
+        timer: () => (o.late ? Promise.resolve() : new Promise(() => {})),
+      }),
+  };
+}
+
+test('what’s playing in time names the heard track', async () => {
+  const a = asking({});
+  assert.deepEqual(await a.run(), { ok: true, message: 'On SUB/WAVE: Teardrop by Massive Attack.' });
+  assert.equal(a.signals[0]?.aborted, false);
+  assert.deepEqual(await asking({ snapshot: snap({ online: false }) }).run(), {
+    ok: true,
+    message: 'SUB/WAVE is off air right now.',
+  });
+});
+
+test('what’s playing from a station too slow to answer says so, and its reads are stopped', async () => {
+  const a = asking({ snapshot: null, late: true });
+  assert.deepEqual(await a.run(), slowReply('SUB/WAVE'));
+  assert.equal(a.signals[0]?.aborted, true);
+});
+
+test('the deadline is what is left of the budget when the reads start', async () => {
+  const waits: number[] = [];
+  await whatsPlayingHeard({
+    station: 'SUB/WAVE',
+    snapshot: async () => snap(),
+    deadline: 10_000,
+    now: () => 4_000,
+    timer: (ms) => {
+      waits.push(ms);
+      return new Promise(() => {});
+    },
+  });
+  assert.deepEqual(waits, [6_000]);
 });
 
 test('a refused like is said in the station’s words, and the heart stays as it was', async () => {
