@@ -23,19 +23,22 @@ private let requestName = Notification.Name("SubwaveIntentRequest")
 private let ackName = Notification.Name("SubwaveIntentAck")
 private let replyName = Notification.Name("SubwaveIntentReply")
 
-// The tune control's state (targets/live-activity/TuneControl.swift), matched
-// by STRING like the names above.
+// Whether the station is on, read by OnAirFlag in
+// targets/live-activity/_shared/OnAirFlag.swift for the tune control
+// (targets/live-activity/TuneControl.swift) and the CarPlay station list.
+// Matched by STRING like the names above.
 private let appGroup = "group.com.getsubwave.app"
 private let onAirKey = "subwave.onAir"
-// Read by targets/live-activity/_shared/SubwaveCarPlay.swift.
 private let onAirChangedName = Notification.Name("SubwaveOnAirChanged")
 private let tuneControlKind = "com.getsubwave.app.tune"
 // The saved stations, read by SavedStations in
 // targets/live-activity/_shared/StationEntities.swift, and the app-target class
 // that re-indexes them for Spotlight and the Siri phrases with a station in
 // them. That code sees the entity types; this pod does not, so it is reached
-// by name.
+// by name. The CarPlay station list redraws on the name (savedStationsChanged
+// there), also matched by STRING.
 private let stationsKey = "subwave.stations"
+private let stationsChangedName = Notification.Name("SubwaveStationsChanged")
 private let stationIndexClass = "SubwaveStationIndex"
 
 public class SubwaveAppIntentsModule: Module {
@@ -112,12 +115,14 @@ public class SubwaveAppIntentsModule: Module {
 
     /// The saved stations and the active one, as JSON from JS:
     /// `{ active, stations: [{ id, name }] }`. Names and credential-free bases
-    /// only. Writes them for the intents and re-indexes Spotlight.
+    /// only. Writes them for the intents, re-indexes Spotlight and tells the
+    /// CarPlay station list.
     Function("setStations") { (json: String) in
       UserDefaults(suiteName: appGroup)?.set(json, forKey: stationsKey)
       if let index: AnyClass = NSClassFromString(stationIndexClass) {
         _ = (index as AnyObject).perform(NSSelectorFromString("reindex"))
       }
+      NotificationCenter.default.post(name: stationsChangedName, object: nil)
     }
   }
 

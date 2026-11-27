@@ -9,11 +9,13 @@
 //      simulator build (the CarPlay simulator ignores provisioning) and, once
 //      the grant lands, in eas.json. Unset, the app is exactly as before.
 //   2. A CarPlay scene role in the scene manifest that `ios.enableSceneSupport`
-//      writes, and the phone role's delegate swapped for PhoneSceneDelegate,
-//      which adopts React Native when the car launched the app first.
+//      writes, multiple scenes on, and the phone role's delegate swapped for
+//      PhoneSceneDelegate, which adopts React Native when the car launched the
+//      app first and refuses a second window.
 //
 // Must come BEFORE expo-build-properties in app.json: a later plugin's Info.plist
 // mod runs first, and this one edits the manifest that one creates.
+// scripts/carplay-plugin.test.ts checks both, flag set and unset.
 //
 // Usage in app.json plugins: "./plugins/withCarPlay"
 
@@ -23,13 +25,13 @@ const ENTITLEMENT = 'com.apple.developer.carplay-audio';
 const PHONE_ROLE = 'UIWindowSceneSessionRoleApplication';
 const CAR_ROLE = 'CPTemplateApplicationSceneSessionRoleApplication';
 
-function enabled() {
+function carPlayEnabled() {
   return process.env.SUBWAVE_CARPLAY === '1';
 }
 
 function withCarPlayEntitlement(config) {
   return withEntitlementsPlist(config, (cfg) => {
-    if (enabled()) cfg.modResults[ENTITLEMENT] = true;
+    if (carPlayEnabled()) cfg.modResults[ENTITLEMENT] = true;
     else delete cfg.modResults[ENTITLEMENT];
     return cfg;
   });
@@ -37,22 +39,33 @@ function withCarPlayEntitlement(config) {
 
 function withCarPlayScene(config) {
   return withInfoPlist(config, (cfg) => {
-    if (!enabled()) return cfg;
-    const manifest = cfg.modResults.UIApplicationSceneManifest;
-    const phone = manifest?.UISceneConfigurations?.[PHONE_ROLE]?.[0];
-    if (!phone) {
+    if (!carPlayEnabled()) return cfg;
+    const written = cfg.modResults.UIApplicationSceneManifest;
+    if (!written?.UISceneConfigurations?.[PHONE_ROLE]?.[0]) {
       throw new Error(
         'withCarPlay: no scene manifest. Turn on expo-build-properties ios.enableSceneSupport, ' +
           'and list ./plugins/withCarPlay before expo-build-properties in app.json.',
       );
     }
-    phone.UISceneDelegateClassName = 'SubwavePhoneSceneDelegate';
+    // A copy: expo-build-properties hands over its own module-level manifest,
+    // and compares later ones against it to tell its manifest from the app's.
+    const manifest = structuredClone(written);
+    // Apple's CarPlay manifest (developer.apple.com/documentation/carplay/
+    // building-your-apps-initial-carplay-interface): multiple scenes on, since
+    // the app declares a phone scene and a CarPlay one, and the CarPlay class
+    // named. On iPad that also allows a second window, which
+    // PhoneSceneDelegate refuses.
+    manifest.UIApplicationSupportsMultipleScenes = true;
+    manifest.UISceneConfigurations[PHONE_ROLE][0].UISceneDelegateClassName =
+      'SubwavePhoneSceneDelegate';
     manifest.UISceneConfigurations[CAR_ROLE] = [
       {
+        UISceneClassName: 'CPTemplateApplicationScene',
         UISceneConfigurationName: 'CarPlay',
         UISceneDelegateClassName: 'SubwaveCarPlaySceneDelegate',
       },
     ];
+    cfg.modResults.UIApplicationSceneManifest = manifest;
     return cfg;
   });
 }

@@ -11,8 +11,9 @@ import UIKit
 // Swift draws, JS decides. The list reads the stations the app mirrors for
 // Siri (SavedStations), and a tap hands the station to JS through the same
 // bridge Siri's Tune in uses, so switching and tuning in are
-// src/intents/tune.ts, and Now Playing is fed by the player as it is for the
-// Lock Screen.
+// src/intents/tune.ts (decided in tune-flow.ts), which hands the load to the
+// mounted player when there is one, and every wait fits the deadline the
+// bridge sends. Now Playing is fed by the player as it is for the Lock Screen.
 //
 // App target only, like SubwaveShortcuts.swift.
 #if canImport(ExpoModulesCore)
@@ -44,7 +45,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     configureNowPlaying()
 
     let center = NotificationCenter.default
-    for name in [savedStationsChanged, Notification.Name("SubwaveOnAirChanged")] {
+    for name in [savedStationsChanged, OnAirFlag.changed] {
       observers.append(
         center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
           self?.refreshStations()
@@ -66,8 +67,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
   private func stationSections() -> [CPListSection] {
     let saved = SavedStations.load()
-    let onAir =
-      UserDefaults(suiteName: "group.com.getsubwave.app")?.bool(forKey: "subwave.onAir") ?? false
+    let onAir = OnAirFlag.isOn
     let icon = UIImage(systemName: "dot.radiowaves.left.and.right")
     let items = saved.stations.map { station -> CPListItem in
       let host = URL(string: station.id)?.host() ?? station.id
@@ -86,14 +86,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
   }
 
   /// The row shows a spinner until `completion`, so it is called once the
-  /// stream has started or failed, not when the tap lands.
+  /// stream has started or failed, not when the tap lands: at most the
+  /// bridge's reply window, which JS's waits are cut to.
   private func tuneIn(_ stationID: String, completion: @escaping () -> Void) {
     Task { @MainActor in
       do {
         try await SubwaveIntentBridge.perform(.tuneIn, ["station": stationID])
         showNowPlaying()
       } catch {
-        showAlert((error as? SubwaveIntentError)?.message ?? "SUB/WAVE couldn't tune in.")
+        showAlert(Self.message(for: error, else: "SUB/WAVE couldn't tune in."))
       }
       completion()
     }
@@ -103,14 +104,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
   /// The system screen, fed from the player's Now Playing info. No skip or
   /// scrub (one shared live stream); a heart, liked through the same path as
-  /// "like this song" from Siri.
+  /// "like this song" from Siri. A like that fails says why, as Siri would.
   private func configureNowPlaying() {
     let nowPlaying = CPNowPlayingTemplate.shared
     nowPlaying.isUpNextButtonEnabled = false
     nowPlaying.isAlbumArtistButtonEnabled = false
     if let heart = UIImage(systemName: "heart") {
-      let like = CPNowPlayingImageButton(image: heart) { _ in
-        Task { _ = try? await SubwaveIntentBridge.perform(.like) }
+      let like = CPNowPlayingImageButton(image: heart) { [weak self] _ in
+        Task { @MainActor in
+          do {
+            try await SubwaveIntentBridge.perform(.like)
+          } catch {
+            self?.showAlert(Self.message(for: error, else: "SUB/WAVE couldn't like that song."))
+          }
+        }
       }
       nowPlaying.updateNowPlayingButtons([like])
     }
@@ -121,6 +128,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
       !(controller.topTemplate is CPNowPlayingTemplate)
     else { return }
     controller.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
+  }
+
+  /// The bridge's own message (JS's answer, or that the app didn't answer),
+  /// else `fallback`.
+  private static func message(for error: Error, else fallback: String) -> String {
+    (error as? SubwaveIntentError)?.message ?? fallback
   }
 
   private func showAlert(_ message: String) {
@@ -150,6 +163,10 @@ enum ReactBoot {
       provider.window == nil,
       let factory = provider.reactNativeFactory
     else { return }
+    // No player has run in this process yet, so an on-air flag still set was
+    // left by an app killed while it played.
+    OnAirFlag.clearStale()
+    // Sized when PhoneSceneDelegate gives it a scene.
     let window = UIWindow(frame: .zero)
     provider.window = window
     factory.startReactNative(
@@ -158,9 +175,12 @@ enum ReactBoot {
 }
 
 /// The phone's window scene: Expo's own, except when React Native is already
-/// running in a window with no scene (ReactBoot, or a scene the system
-/// disconnected). That window is moved onto this scene, so there is only ever
-/// one React tree.
+/// running in a window. A window with no scene (ReactBoot, or a scene the
+/// system disconnected) is moved onto this scene. A window on another live
+/// scene means a second window: CarPlay needs UIApplicationSupportsMultipleScenes,
+/// which also lets iPadOS open more windows of the app, and one React tree
+/// plays one stream, so the second is refused rather than given a second
+/// player.
 @available(iOSApplicationExtension, unavailable)
 @objc(SubwavePhoneSceneDelegate)
 final class PhoneSceneDelegate: ExpoAppSceneDelegate {
@@ -172,25 +192,32 @@ final class PhoneSceneDelegate: ExpoAppSceneDelegate {
     guard
       let windowScene = scene as? UIWindowScene,
       let provider = UIApplication.shared.delegate as? ExpoReactNativeFactoryProvider,
-      let running = provider.window,
-      running.windowScene == nil
+      let running = provider.window
     else {
       super.scene(scene, willConnectTo: session, options: connectionOptions)
       return
     }
+    if running.windowScene != nil {
+      UIApplication.shared.requestSceneSessionDestruction(session, options: nil, errorHandler: nil)
+      return
+    }
     running.windowScene = windowScene
+    // ReactBoot made it with no screen to size it by.
+    running.frame = windowScene.coordinateSpace.bounds
     window = running
     running.makeKeyAndVisible()
 
-    // What ExpoAppSceneDelegate would forward. React Native was started
-    // before this scene existed, so a link that opened the app arrives as an
-    // event rather than as Linking.getInitialURL().
-    let app = UIApplication.shared
-    for context in connectionOptions.urlContexts {
-      _ = app.delegate?.application?(app, open: context.url, options: [:])
+    // What ExpoAppSceneDelegate forwards after its own start, through its own
+    // handlers, so the open options, the RCTLinkingManager fallback and its
+    // dedupe stay Expo's. React Native was started before this scene existed,
+    // so a link that opened the app arrives as a `url` event rather than as
+    // Linking.getInitialURL(). Re-check on the SDK 58 upgrade (TESTING.md).
+    if !connectionOptions.urlContexts.isEmpty {
+      self.scene(scene, openURLContexts: connectionOptions.urlContexts)
     }
-    for activity in connectionOptions.userActivities {
-      _ = app.delegate?.application?(app, continue: activity) { _ in }
+    connectionOptions.userActivities.forEach { self.scene(scene, continue: $0) }
+    if let shortcutItem = connectionOptions.shortcutItem {
+      self.windowScene(windowScene, performActionFor: shortcutItem) { _ in }
     }
   }
 }

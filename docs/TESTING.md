@@ -85,7 +85,14 @@ SDK 58 template does: a scene manifest naming Expo's `ExpoAppSceneDelegate` (it
 creates the window, starts React Native and forwards URL and lifecycle events to
 the app delegate), and an app delegate that only creates the factory. Drop the
 option with the SDK 58 upgrade; it warns and does nothing there. `plugins/withCarPlay.js`
-edits that manifest when CarPlay is on, so after the upgrade check it still finds one.
+edits that manifest when CarPlay is on, so after the upgrade check it still finds one
+(`scripts/carplay-plugin.test.ts` builds it through expo-build-properties). Check
+`SubwavePhoneSceneDelegate` (`targets/live-activity/_shared/SubwaveCarPlay.swift`) too:
+it subclasses `ExpoAppSceneDelegate` and, when it adopts a running window instead
+of calling `super`, re-sends the connection's URLs, user activities and quick
+action through that class's own `scene(_:openURLContexts:)`, `scene(_:continue:)`
+and `windowScene(_:performActionFor:)`. If SDK 58's delegate handles more at
+connect time, or renames those, the adopt path must follow.
 
 EAS builds SDK 57 with **Xcode 26.6** (the `sdk-57` image) unless `eas.json`
 names another, so a default store build has none of the iOS 27-only code
@@ -275,15 +282,26 @@ it in `eas.json`'s `env` for the iOS profiles.
 - **Swift draws, JS decides.** `targets/live-activity/_shared/SubwaveCarPlay.swift`
   reads the stations the app already mirrors for Siri (`SavedStations`, App Group),
   and a tap goes through the App Intents bridge as `tuneIn`, so switching and tuning
-  in are `src/intents/tune.ts`. The heart is the bridge's `like`. The list redraws on
-  `SubwaveStationsChanged` and `SubwaveOnAirChanged` (posted by `StationIndex.reindex`
-  and the module's `setOnAir`).
+  in are `src/intents/tune.ts` (`tune-flow.ts` decides): handed to the mounted player
+  when there is one, and cut to the bridge's deadline like any Siri tune-in. The heart is the bridge's `like`, and a failed like
+  shows the bridge's message in an alert. The list redraws on `SubwaveStationsChanged`
+  and `SubwaveOnAirChanged` (posted by the module's `setStations` and `setOnAir`); the
+  on-air flag is read through `OnAirFlag` (`_shared/OnAirFlag.swift`), shared with the
+  tune control.
 - **The car can launch the app with no phone screen.** Under the scene life cycle
   React Native starts when the phone's window scene connects, and a car launch
   connects only the CarPlay scene. So the CarPlay delegate starts React Native into a
   window with no scene (`ReactBoot`), and the plugin swaps the phone role's delegate
   for `SubwavePhoneSceneDelegate`, which moves that window onto the phone's scene
-  when it connects instead of starting a second copy.
+  (sized to it) when it connects instead of starting a second copy. A process the
+  car started has played nothing, so `ReactBoot` clears an on-air flag a killed app
+  left set.
+- **Multiple scenes are on with the flag.** Apple's CarPlay manifest sets
+  `UIApplicationSupportsMultipleScenes` (the app declares a phone scene and a CarPlay
+  one) and names `CPTemplateApplicationScene` as the CarPlay scene class, so the plugin
+  does both. On iPad that also lets the system open a second window of the app;
+  `SubwavePhoneSceneDelegate` asks for that session's destruction, because one React
+  tree plays one stream. Unset, the manifest stays `false`.
 - **Testing it.** Xcode 27 has no Simulator.app, and DeviceHub offers no CarPlay
   display for a simulator (FB24785359). The routes are Xcode 26's Simulator.app,
   DeviceHub's CarPlay Simulator with a USB iPhone (needs the entitlement in the
@@ -292,12 +310,16 @@ it in `eas.json`'s `env` for the iOS profiles.
   Build with `SUBWAVE_CARPLAY=1 npx expo prebuild -p ios`, then check: the list shows
   each saved station with its host and marks the playing one; a tap spins, then
   plays and pushes Now Playing; a failure shows the bridge's message in an alert;
-  adding a station on the phone updates the list. Then cold: kill the app, connect
-  CarPlay, open SUB/WAVE from the car, tap a station (it must play), then open the
-  phone app (it must show the same playback, tuned in, with no second player).
-- **Verified so far (2026-10):** it builds with Xcode 27, and a normal phone launch
-  goes through `SubwavePhoneSceneDelegate`. The CarPlay screens and the car-first
-  launch are not yet run.
+  a heart with nothing on air shows the bridge's message too; adding a station on
+  the phone updates the list. Then cold: play a station, kill the app, connect
+  CarPlay, open SUB/WAVE from the car (no station is marked playing), tap a station
+  (it must play), then open the phone app (it must fill the screen and show the same
+  playback, tuned in, with no second player). On an iPad build with the flag, a
+  second window (drag the app from the Dock) must close rather than open a player.
+- **Verified so far (2026-11):** it builds with Xcode 27, a normal phone launch
+  goes through `SubwavePhoneSceneDelegate` (2026-10), and the plugin's plist edits
+  are under `npm test`. The CarPlay screens, the car-first launch and the iPad second
+  window are not yet run.
 
 ### Android Auto — the station list in the car (Android only)
 
