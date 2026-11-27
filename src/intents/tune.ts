@@ -22,7 +22,13 @@ import {
   playOnMountedPlayer,
   tuneInOnArrival,
 } from '@/lib/remote-play';
-import { announceStationStoreChanged, loadStations, setActiveStation } from '@/lib/station';
+import {
+  announceStationStoreChanged,
+  loadStations,
+  readActiveStationState,
+  setActiveStation,
+} from '@/lib/station';
+import { stationLockRequired } from '@/lib/station-password';
 import { timeLeft } from './deadline';
 import { activeStation } from './station';
 import * as flow from './tune-flow';
@@ -70,18 +76,34 @@ const deps: flow.TuneDeps = {
   log: (line) => playbackLog.add(line),
 };
 
-export function tuneIn(stationId: string | undefined, deadline: number): Promise<IntentReply> {
+export function tuneIn(stationId: string | undefined, deadline: number): Promise<flow.TuneReply> {
   return flow.tuneIn(deps, stationId, deadline);
 }
 
 /** A station asked for by name ("Hey Google, play Night Shift on SUB/WAVE"),
  *  as Siri matches one (tune-flow.ts). */
-export function tuneInByName(query: string, deadline: number): Promise<IntentReply> {
+export function tuneInByName(query: string, deadline: number): Promise<flow.TuneReply> {
   return flow.tuneInByName(deps, query, deadline);
 }
 
 export function tuneOut(): Promise<IntentReply> {
   return flow.tuneOut(deps);
+}
+
+/** Whether the active station needs a password the app has none saved for:
+ *  after a car pick's stream failed, to tell the car why
+ *  (src/intents/car-errors.ts). One /state read, through readJson's deadline;
+ *  the stream itself is never probed. Unknown counts as not locked. */
+export async function activeStationLocked(): Promise<boolean> {
+  const { store, password } = await readActiveStationState();
+  if (!store.activeStation || password) return false;
+  const station = await activeStation();
+  if (!station) return false;
+  try {
+    return stationLockRequired((await station.api.state()).privacy);
+  } catch {
+    return false;
+  }
 }
 
 async function startAndWait(start: () => Promise<void>, deadline: number): Promise<boolean> {

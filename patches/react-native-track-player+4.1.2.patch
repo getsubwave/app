@@ -521,10 +521,10 @@ index b2409a0..38187bc 100644
      }
 diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt
 new file mode 100644
-index 0000000..e222c94
+index 0000000..d9788c4
 --- /dev/null
 +++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,152 @@
 +package com.doublesymmetry.trackplayer.service
 +
 +import android.net.Uri
@@ -542,7 +542,8 @@ index 0000000..e222c94
 + * Android Auto. The app's own MediaBrowserService lists what can be played;
 + * this hands it the player's session and turns the car's "play this item" and
 + * voice searches into the remote-play-id and remote-play-search events, which
-+ * RNTP 4.1.2 declares but never fires. (patched — patch-package)
++ * RNTP 4.1.2 declares but never fires, and shows the car why a pick failed
++ * (showError). (patched — patch-package)
 + */
 +object MediaBrowserBridge {
 +    /** True while a media browser is bound. Lets setupPlayer run with no
@@ -561,7 +562,16 @@ index 0000000..e222c94
 +    }
 +
 +    private var token: MediaSessionCompat.Token? = null
++    private var connector: MediaSessionConnector? = null
++    private var errorShown = false
 +    private val listeners = mutableSetOf<SessionListener>()
++
++    // Audio playing again is the answer to any error the car was shown.
++    private val clearOnPlay = object : Player.Listener {
++        override fun onIsPlayingChanged(isPlaying: Boolean) {
++            if (isPlaying) clearError()
++        }
++    }
 +
 +    /** Calls [listener] with the player's session token now, or once setupPlayer
 +     *  has created the player, and again for each session after it. */
@@ -584,6 +594,8 @@ index 0000000..e222c94
 +        val connector = field(manager, "mediaSessionConnector") as MediaSessionConnector
 +        val player = field(manager, "player") as Player
 +        connector.setPlaybackPreparer(Preparer(player, emit))
++        player.addListener(clearOnPlay)
++        this.connector = connector
 +        val session = connector.mediaSession.sessionToken
 +        token = session
 +        listeners.toList().forEach { it.ready(session) }
@@ -593,9 +605,32 @@ index 0000000..e222c94
 +     *  after this waits for the next setupPlayer instead of taking a dead token. */
 +    @MainThread
 +    internal fun detach() {
++        connector = null
++        errorShown = false
 +        if (token == null) return
 +        token = null
 +        listeners.toList().forEach { it.ended() }
++    }
++
++    /** Puts the session in STATE_ERROR with [message], which Android Auto
++     *  shows in place of Now Playing; [code] is a PlaybackStateCompat
++     *  ERROR_CODE_*. Kept until [clearError] or the next time audio plays.
++     *  False when there is no session to show it on. */
++    @MainThread
++    @JvmStatic
++    fun showError(message: CharSequence, code: Int): Boolean {
++        val connector = connector ?: return false
++        connector.setCustomErrorMessage(message, code)
++        errorShown = true
++        return true
++    }
++
++    @MainThread
++    @JvmStatic
++    fun clearError() {
++        if (!errorShown) return
++        errorShown = false
++        connector?.setCustomErrorMessage(null)
 +    }
 +
 +    private fun field(manager: NotificationManager, name: String): Any =

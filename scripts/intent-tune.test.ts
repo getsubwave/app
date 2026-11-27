@@ -33,8 +33,16 @@ import {
   tuneInOnArrival,
 } from '../src/lib/remote-play.ts';
 
-const NIGHT = { url: 'https://radio.example.com', name: 'Night Shift', lastUsed: 2 };
-const WAVE = { url: 'https://www.getsubwave.com', name: 'SUB/WAVE', lastUsed: 1 };
+const NIGHT = {
+  url: 'https://radio.example.com',
+  name: 'Night Shift',
+  lastUsed: 2,
+};
+const WAVE = {
+  url: 'https://www.getsubwave.com',
+  name: 'SUB/WAVE',
+  lastUsed: 1,
+};
 const DEADLINE = 1_000_000;
 
 interface Opts {
@@ -175,6 +183,8 @@ test('a stream that never starts is reported, and the control turns off with no 
   const reply = await tuneIn(s.deps, undefined, DEADLINE);
   assert.equal(reply.ok, false);
   assert.match(reply.message ?? '', /Night Shift/);
+  assert.equal(reply.reason, 'unreachable');
+  assert.equal(reply.station, 'Night Shift');
   assert.deepEqual(s.onAirStates, [false]);
 });
 
@@ -183,11 +193,13 @@ test('an unsaved station or no station at all is said, and nothing loads', async
   assert.deepEqual(await tuneIn(unsaved.deps, 'https://elsewhere.example.com', DEADLINE), {
     ok: false,
     message: NOT_SAVED_MESSAGE,
+    reason: 'not-saved',
   });
   const none = intents({ active: null });
   assert.deepEqual(await tuneIn(none.deps, undefined, DEADLINE), {
     ok: false,
     message: NO_STATION_MESSAGE,
+    reason: 'no-station',
   });
   assert.deepEqual([...unsaved.calls, ...none.calls], []);
 });
@@ -258,7 +270,9 @@ test('within gives the work’s answer, or TIMED_OUT once the wait ends first', 
 
 test('a station asked for by name tunes in to it, through the mounted player', async () => {
   const s = intents({ mounted: true, active: WAVE.url });
-  assert.deepEqual(await tuneInByName(s.deps, 'night shift', DEADLINE), { ok: true });
+  assert.deepEqual(await tuneInByName(s.deps, 'night shift', DEADLINE), {
+    ok: true,
+  });
   assert.deepEqual(s.calls, ['store Night Shift', `arm ${NIGHT.url}`, 'announce', 'disarm']);
 });
 
@@ -280,9 +294,15 @@ test('with no player mounted, a station asked for by name is loaded directly', a
 // service.ts wires them, never load past the mounted player.
 function carPicks(s: ReturnType<typeof intents>, now: number) {
   const logged: string[] = [];
+  const shown: string[] = [];
   const car = createCarPicks(
     (line) => logged.push(line),
     () => now,
+    {
+      show: (e) => shown.push(`${e.kind}: ${e.message}`),
+      clear: () => shown.push('clear'),
+      locked: async () => false,
+    },
   );
   const byId = (id: string) => ({
     label: `pick ${id}`,
@@ -292,7 +312,7 @@ function carPicks(s: ReturnType<typeof intents>, now: number) {
     label: `search "${query}"`,
     tune: (deadline: number) => tuneInByName(s.deps, query, deadline),
   });
-  return { car, byId, byName, logged };
+  return { car, byId, byName, logged, shown };
 }
 
 test('car picks go through the mounted player: by id, by voice, and a prepared Play', async () => {
@@ -326,5 +346,20 @@ test('a car pick its station refuses is logged with the reason', async () => {
   await c.car.pick(c.byId('https://unknown.example.com'), true);
   assert.deepEqual(c.logged, [
     `car pick https://unknown.example.com refused: ${NOT_SAVED_MESSAGE}`,
+    'car error shown: not-saved',
+  ]);
+  assert.deepEqual(c.shown, [
+    'clear',
+    "not-saved: That station isn't saved. When it's safe, add it in SUB/WAVE on your phone.",
+  ]);
+});
+
+test('a car pick whose stream never starts names the station in the car', async () => {
+  const s = intents({ plays: false });
+  const c = carPicks(s, DEADLINE - CAR_PICK_BUDGET_MS);
+  await c.car.pick(c.byName(''), true);
+  assert.deepEqual(c.shown, [
+    'clear',
+    "unreachable: Couldn't reach Night Shift. Try again in a moment.",
   ]);
 });

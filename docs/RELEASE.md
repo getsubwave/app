@@ -65,7 +65,9 @@ a branch at update time.
 |---|---|---|---|
 | `development` / `development-device` | — | dev client | local Metro, no OTA |
 | `preview` | `preview` | internal (Android APK, iOS non-sim) | tester builds; OTA test bed |
-| `production` | `production` | store builds (Android AAB, iOS) | App Store / Play |
+| `production` | `production` | store builds (Android AAB, iOS) | App Store / Play, **no Android Auto** |
+| `production-auto` | `production` | Android AAB with `SUBWAVE_ANDROID_AUTO=1` | Play **closed testing** with Android Auto (below) |
+| `apk` | `production` | Android APK with `SUBWAVE_ANDROID_AUTO=1` | the sideloaded build with Android Auto (below) |
 
 `cli.appVersionSource = "remote"`, so build/version numbers live on EAS
 (`production` auto-increments). Don't hand-edit `ios.buildNumber` /
@@ -135,11 +137,73 @@ eas build  --profile production --platform android   # AAB (EAS-managed keystore
 eas submit --profile production --platform android   # uses secrets/play-service-account.json
 ```
 
+For the Android Auto build, see [Android Auto](#android-auto-closed-testing-first)
+below: `production-auto` builds it and submits it to closed testing.
+
 `eas submit` Android config (`eas.json` → `submit.production.android`) points at
 `secrets/play-service-account.json` (gitignored). Data-safety form answers:
 [`docs/store/PLAY-DATA-SAFETY.md`](./store/PLAY-DATA-SAFETY.md). Full flow +
 Play Console checklist: `subwave-app-android-release` skill and
 `PRODUCTION-READINESS.md` Phase D.
+
+### Android Auto: closed testing first
+
+Android Auto is behind `SUBWAVE_ANDROID_AUTO=1` at prebuild
+(`plugins/withAndroidAuto.js`, TESTING.md → Android Auto). Play enforced against
+the app's first car listing (#477, 20 Jun 2026): *media apps that use a TTS
+engine to read out content aren't permitted*. A browse tree doesn't change
+that, so whether the car listing survives a second review is a **decision, not
+code**. The plan:
+
+1. **Play Console, once:** Advanced settings → Form factors → Add form factor →
+   **Android Auto**, and opt in. A bundle that declares
+   `com.google.android.gms.car.application` goes through Google's extra manual
+   car review.
+2. **Closed testing with Android Auto:**
+
+   ```bash
+   eas build  --profile production-auto --platform android
+   eas submit --profile production-auto --platform android   # track "alpha" = closed testing, as a draft
+   ```
+
+   Why closed testing (`alpha`) and not `internal`: Google's car review is
+   *none* on internal testing, *non-blocking* on closed testing and
+   *blocking* on open testing and production
+   (developer.android.com/training/cars/distribute). Internal would never tell
+   us whether the listing passes; closed testing gets the verdict without
+   holding the build back. The release lands as a draft, so a person sends it
+   for review in Play Console.
+3. **Review notes** (Play Console → the release / App access): say plainly
+   that the DJ voice is generated on the station's server and mixed into the
+   Icecast audio stream with the music, like a broadcast radio presenter; **the
+   app runs no TTS engine and reads no text aloud**, it plays one live audio
+   stream. Give the reviewer a station to play: the featured SUB/WAVE station
+   (`extra.featuredStation`, offered in onboarding) or a test station's address
+   and password, and say a station must be added on the phone once, after which
+   the car lists it.
+4. **If the car review passes**, promote the same build towards production
+   (`production-auto` stays the Play profile from then on).
+5. **If it is rejected**, ship Play with the flag off:
+   `eas build --profile production --platform android` and the usual `eas submit
+   --profile production`, same JS, no car listing. Don't argue the build past
+   the policy with a variant that hides the DJ.
+6. **Separately, either way: the sideloaded APK.** `eas build --profile apk
+   --platform android` builds a release APK with Android Auto on. Publish it on
+   GitHub Releases and the website, by hand (nothing here uploads it), with
+   these notes for listeners:
+   - Android Auto lists only apps installed from Play unless developer mode
+     allows others: in Android Auto's settings tap *Version and permission
+     info* 10 times, then ⋮ → **Developer settings** → turn on **Unknown
+     sources**. Without that, SUB/WAVE doesn't appear in the car.
+   - The APK is signed with the upload key and Play's copy with Play's app
+     signing key, so one can't update the other: uninstall the Play version
+     before installing the APK, and the other way round.
+
+OTA updates reach all three Android builds alike: the flag changes only the
+generated manifest, not the fingerprint's inputs (`npx expo-updates
+fingerprint:generate --platform android` gives the same hash with and
+without it), so the `production` channel serves `production`, `production-auto`
+and `apk` binaries from one `eas update`.
 
 ---
 

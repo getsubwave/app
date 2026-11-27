@@ -5,7 +5,9 @@
 // station or asking for one by voice then arrives in service.ts.
 
 import { AppRegistry, Platform } from 'react-native';
+import { carSetupFailed } from '../../modules/android-auto';
 import { setupPlayer } from '@/audio/player';
+import { plog } from '@/hooks/usePlayer';
 
 // Matched by STRING with modules/android-auto/…/CarConnectTask.kt (npm test checks).
 const CAR_CONNECT_TASK = 'SubwaveCarConnect';
@@ -14,6 +16,15 @@ const CAR_CONNECT_TASK = 'SubwaveCarConnect';
  *  no screen to mount. */
 export function registerCarHandlers(): void {
   if (Platform.OS !== 'android') return;
-  // Sets up only. Nothing plays until the listener picks a station.
-  AppRegistry.registerHeadlessTask(CAR_CONNECT_TASK, () => () => setupPlayer());
+  // Sets up only. Nothing plays until the listener picks a station. A refusal
+  // (Android can deny a background start) shows the car an error at once,
+  // rather than after the browse service's 8 s wait.
+  AppRegistry.registerHeadlessTask(
+    CAR_CONNECT_TASK,
+    () => () =>
+      setupPlayer().catch((e: unknown) => {
+        plog(`car setup failed: ${e instanceof Error ? e.message : String(e)}`);
+        carSetupFailed();
+      }),
+  );
 }
