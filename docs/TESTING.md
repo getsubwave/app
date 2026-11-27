@@ -60,7 +60,9 @@ and clears that token when `MusicService` is destroyed. `MusicModule.setupPlayer
 skips RNTP's no-activity-in-front refusal while a media browser is bound, a
 background-setup bypass that only the car's callers can switch on
 (`CarCallers`), and turns a start Android still refuses into a rejection
-instead of a crash. Every Android session runs through both.
+instead of a crash. Every Android session runs through both. The bridge also
+puts the session in an error state for the car (`showError`, through the
+connector's `setCustomErrorMessage`), cleared when audio plays.
 
 For a device smoke test, play a track with a known duration and inspect
 `adb shell dumpsys media_session`: its duration should be the song's duration
@@ -323,23 +325,42 @@ it in `eas.json`'s `env` for the iOS profiles.
 
 ### Android Auto — the station list in the car (Android only)
 
-SUB/WAVE lists in Android Auto as a media app: the saved stations, tap one to tune
-in, then Auto's own Now Playing screen with play and pause. "Hey Google, play
-Night Shift on SUB/WAVE" tunes in by name.
+SUB/WAVE lists in Android Auto as a media app: a Stations tab of the saved
+stations, tap one to tune in, then Auto's own Now Playing screen with play and
+pause. "Hey Google, play Night Shift on SUB/WAVE" tunes in by name.
 
 > **Play history.** A manifest-only declaration (#444) was **enforced against by
 > Google Play** (20 Jun 2026): *media apps that use a TTS engine to read out
 > content aren't permitted*, which is what the AI DJ does, and #477 removed it.
-> This is a second attempt, now with a real browse tree. If Play enforces again,
-> remove `modules/android-auto` from the build rather than shipping around it.
+> This is a second attempt, now with a real browse tree, **behind a build flag**
+> so the Play build can ship without it. A browse tree doesn't answer that
+> policy: the review notes do (`docs/RELEASE.md` → Android Auto has the plan).
+
+**Off unless `SUBWAVE_ANDROID_AUTO=1` is set at prebuild** (`plugins/withAndroidAuto.js`).
+The module's own manifest declares nothing; the plugin adds `SubwaveBrowseService`
+with its `android.media.browse.MediaBrowserService` intent filter, the
+`com.google.android.gms.car.application` meta-data and
+`res/xml/subwave_automotive_app_desc.xml`. Unset, or any other value, the merged
+manifest has none of it, so Android Auto never lists the app, and
+`scripts/android-auto-plugin.test.ts` checks both states. The Kotlin, the RNTP
+patch and the JS ship in every Android build either way, and do nothing without
+the service: nothing binds to browse, so the car-connect task never runs and
+the background-setup bypass never switches on. `eas.json`'s `production-auto`
+(Play closed testing) and `apk` (sideload) profiles set it; `production` doesn't.
 
 The pieces, all in a new binary (none of it reaches a phone over the air):
 
-- **`modules/android-auto`** declares the car app (`subwave_automotive_app_desc.xml`
-  and the `com.google.android.gms.car.application` meta-data, merged from the
-  module's manifest) and `SubwaveBrowseService`, a `MediaBrowserServiceCompat`.
-  It lists the stations JS mirrors into SharedPreferences (`setStations`, from
-  StationContext beside the Siri mirror), names and bases only.
+- **`modules/android-auto`** holds `SubwaveBrowseService`, a
+  `MediaBrowserServiceCompat`. It lists the stations JS mirrors into
+  SharedPreferences (`setStations`, from StationContext beside the Siri mirror),
+  names and bases only, the one listened to last first.
+- **The browse tree is one browsable Stations tab.** Google's root hints default
+  to browsable-only root children, at most four, shown as tabs, and Android
+  Automotive must be assumed to need that. A caller whose hints allow only
+  playable root children gets the stations at its root instead (`rootFor`).
+  With no station saved, the tab holds one item that is neither browsable nor
+  playable: *No stations yet — When it's safe, add one in SUB/WAVE on your
+  phone*. The strings are in `res/values/subwave_android_auto.xml`.
 - **The browse session is the player's own.** The RNTP patch's
   `MediaBrowserBridge` hands the service KotlinAudio's session token, and gives
   the session a `PlaybackPreparer`: Auto's play-from-id and voice search become
@@ -350,6 +371,18 @@ The pieces, all in a new binary (none of it reaches a phone over the air):
   it, and so to StreamRecovery, and a pick of another station switches through
   it; only with none mounted does it load the stream itself. Play on an idle player still
   takes the connector's own path (`onPrepare` just prepares).
+- **A failed pick shows the car why** (`src/intents/car-errors.ts`). The bridge's
+  `showError` calls ExoPlayer's `MediaSessionConnector.setCustomErrorMessage`,
+  which puts the session in `STATE_ERROR` with the message, and Auto shows it in
+  place of Now Playing. `tune-flow.ts` replies carry a `reason` (the Swift bridge
+  reads only `ok` and `message`): *not-saved* and *no-station* send the driver to
+  the phone "when it's safe" (Google's guideline VI-1); a stream that never
+  started is *locked* when the station needs a password none is saved for (one
+  `/state` read through `readJson`, never a stream probe, `activeStationLocked`),
+  else *unreachable*. The kinds map to `PlaybackStateCompat` error codes in
+  `SubwaveAndroidAutoModule.kt` (`npm test` checks the two lists match). The next
+  pick clears it, and so does audio playing (the bridge listens for it); only the
+  latest pick's failure is ever shown.
 - **The car can launch the app with no screen.** The session exists only once JS
   has set the player up, so the first connection starts React Native and runs the
   `SubwaveCarConnect` headless task (`src/intents/car.ts`), which calls
@@ -357,44 +390,109 @@ The pieces, all in a new binary (none of it reaches a phone over the air):
   `setupPlayer` with no activity in front; the patch lets it through while a
   media browser is bound (Android allows the foreground service then), and turns
   a refused start into a rejection instead of a crash.
+- **A cold start that never gets a session fails in 8 s, not never.** If no
+  token arrives within `CONNECT_TIMEOUT_MS`, or the car-connect task reports
+  that `setupPlayer` rejected (`carSetupFailed`), the service hands the car a
+  session of its own whose only state is the error *SUB/WAVE couldn't start.
+  When it's safe, open SUB/WAVE on your phone.*, and `CarConnectTask.reset()`
+  drops the pending React Native start so the next connection starts over. That
+  instance can't take the player's session afterwards; if the player comes up
+  late it releases the error session so the car reconnects to a fresh one.
 - **System UI's resumption query is refused** (`EXTRA_RECENT` → no root): it
   would otherwise start the app in the background on every boot.
 - **Only the car, the Assistant and the system get a root** (`CarCallers`,
   after Google's media sample): this app, the system UID, a platform-signed
   caller or one holding `MEDIA_CONTENT_CONTROL`, or Android Auto, Automotive's
-  media centre or the Google app when the package owns the calling UID and is a
-  system app or installed by Play. Any other app gets no root, so it can't read
-  the saved stations or start the player in the background.
+  media centre, the Google app or the Gemini app when the package owns the
+  calling UID and is a system app or installed by Play. Gemini's package
+  (`com.google.android.apps.bard`) is unconfirmed as the one that binds in the
+  car: check logcat on the Desktop Head Unit. Google's Media Controller Test app
+  (`com.example.android.mediacontroller`) passes in a debuggable build only. Any
+  other app gets no root, so it can't read the saved stations or start the
+  player in the background.
 - **A session token is taken once.** `MediaBrowserServiceCompat` accepts one,
   so the bridge clears its token when `MusicService` is destroyed, and a browse
   service still holding the dead one answers no root until its clients unbind;
   the car's next bind gets a fresh service that waits for the next session.
+  In practice that is rare: swiping the app away runs RNTP's `onTaskRemoved`,
+  which ends the process (`exitProcess`), so the car rebinds to a new one; and a
+  JS reload keeps the same `MusicService` and session. A destroyed
+  `MusicService` in a live process is left as it was: the car recovers on its
+  next connection, since no API can hand a bound client a second token.
 - **A prepare doesn't play.** A pick with `playWhenReady` false (the
   Assistant's prepare-then-play) is held in JS (`src/intents/car-picks.ts`) and
   the next Play tunes in to it; pause or stop drops it. A refused or failed
-  pick is a line in the playback log.
+  pick is a line in the playback log, as is the error the car was shown.
 - **A spoken name that matches nothing plays the station listened to last**,
   as Siri does: a generic word ("play radio") names no station.
 
-Testing needs the Android Auto app on a phone and Google's **Desktop Head Unit**
-(SDK Manager → SDK Tools → Android Auto Desktop Head Unit Emulator). In Android
-Auto's settings tap the version 10 times for developer mode, then ⋮ → **Start head
-unit server**; `adb forward tcp:5277 tcp:5277` and run `desktop-head-unit`. Check:
-the list shows each saved station with its host; a tap plays and opens Now
-Playing, with the DJ's title and artwork; play and pause work; adding a station on
-the phone updates the list; "play <station name>" by voice switches station. Then
-cold: force-stop the app, connect, pick a station (it must play), then open the
-phone app (it must show the same playback). With the phone app open, pick
-another station in the car, then the playing one again: the playback log shows
-`intent station switch: handed to the player` and `intent tune-in: handed to
-the player`, never a direct load. Then the session restart: with the
-car connected, swipe the app away (or reload JS in a dev build), reconnect, and
-pick a station; it must play, not show a dead session. `adb shell dumpsys
-media_session` should list one SUB/WAVE session. Finally a **release build**
-(`eas build --profile preview` or `./gradlew :app:assembleRelease`): the bridge
-reads KotlinAudio's fields by reflection, so only R8's output proves the keep
-rules still pin them, and the car's list, a pick and play/pause must all work
-there too.
+#### Testing on a phone with the Desktop Head Unit
+
+You need the Android Auto app on a phone, signed in to Play, and Google's
+**Desktop Head Unit** (DHU). Install it from Android Studio → Settings →
+Languages & Frameworks → Android SDK → SDK Tools → *Android Auto Desktop Head
+Unit Emulator*, or `sdkmanager "extras;google;auto"`. It lands in
+`~/Library/Android/sdk/extras/google/auto/`. In Android Auto's settings tap
+*Version and permission info* 10 times for developer mode, then ⋮ → **Start
+head unit server** (and check *Add new cars to Android Auto* is on). Then:
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+SUBWAVE_ANDROID_AUTO=1 npx expo prebuild -p android --clean
+npx expo run:android --device
+adb forward tcp:5277 tcp:5277
+~/Library/Android/sdk/extras/google/auto/desktop-head-unit     # or --usb
+adb logcat | grep -iE "SubwaveBrowse|MediaBrowser|gearhead|TrackPlayer|ForegroundService"
+```
+
+In the DHU console, `mic begin` (or M) takes a voice command, `day` / `night`
+switch themes, `restrict all` turns on driving restrictions. Check:
+
+- The root shows one Stations tab; in it each saved station with its host,
+  the one listened to last first. Adding a station on the phone updates it.
+- A tap plays and opens Now Playing, with the DJ's title and artwork; play and
+  pause work; "play <station name>" by voice switches station; "play SUB/WAVE"
+  with no name plays the last station.
+- **Gemini:** ask Gemini to play a station and note which package binds in
+  logcat (`onGetRoot` / `CarCallers`); if it isn't `com.google.android.apps.bard`,
+  fix `CarCallers.GOOGLE_CALLERS`.
+- **Errors:** pick a station on a dead stream (stop its controller) → *Couldn't
+  reach … Try again in a moment.*; a private station with no saved password → *…
+  needs its password. When it's safe, unlock it…*; ask by voice with no station
+  saved → *No station yet…*. Each clears on the next pick and when audio plays.
+  `adb shell dumpsys media_session` shows the SUB/WAVE session's state as 7
+  (`STATE_ERROR`) with the message while one shows.
+- **Empty state:** `adb shell pm clear com.getsubwave.app`, connect: the
+  Stations tab shows *No stations yet*, and a tap does nothing.
+- **Cold start:** force-stop the app (`adb shell am force-stop com.getsubwave.app`),
+  connect, pick a station (it must play), then open the phone app (it must show
+  the same playback). If the car shows *SUB/WAVE couldn't start*, the log says
+  why (`car setup failed: …`, or nothing: the 8 s timeout): that is the
+  background-start refusal this design was worried about.
+- **Mounted player:** with the phone app open, pick another station in the car,
+  then the playing one again: the playback log shows `intent station switch:
+  handed to the player` and `intent tune-in: handed to the player`, never a
+  direct load.
+- **Session restart:** with the car connected, swipe the app away (the process
+  exits), reconnect if the car doesn't, and pick a station; it must play, not
+  show a dead session. Reload JS in a dev build too: the session stays and the
+  car keeps working. `adb shell dumpsys media_session` should list one SUB/WAVE
+  session.
+- **Media Controller Test:** in a debug build it gets a root and can browse and
+  play; in a release build it gets none.
+- **Flag off:** `npx expo prebuild -p android --clean` without the variable, then
+  install: SUB/WAVE must not appear in the car at all, and the merged manifest
+  (`android/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml`)
+  has no `SubwaveBrowseService` or `gms.car.application`.
+- Finally a **release build** (`eas build --profile apk` or
+  `SUBWAVE_ANDROID_AUTO=1 npx expo prebuild -p android --clean && (cd android &&
+  ./gradlew :app:assembleRelease)`): the bridge reads KotlinAudio's fields by
+  reflection, so only R8's output proves the keep rules still pin them, and the
+  car's list, a pick, play/pause and an error message must all work there too.
+
+An Android emulator works only with a Google Play system image (Android Auto
+comes from Play), e.g. `sdkmanager "system-images;android-35;google_apis_playstore;arm64-v8a"`,
+then the same Android Auto steps inside it; it is less reliable than a phone.
 
 ### iPad — every orientation, Split View, Stage Manager
 

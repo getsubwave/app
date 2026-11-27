@@ -1,10 +1,11 @@
 // This headless service cannot access React state.
 // Skip and seek are unavailable on a shared live broadcast.
 import TrackPlayer, { Event } from 'react-native-track-player';
+import { clearCarError, showCarError } from './modules/android-auto';
 import { getLastLiveMeta, loadAndPlay } from '@/audio/player';
 import { plog } from '@/hooks/usePlayer';
 import { createCarPicks } from '@/intents/car-picks';
-import { tuneIn, tuneInByName } from '@/intents/tune';
+import { activeStationLocked, tuneIn, tuneInByName } from '@/intents/tune';
 import { remotePlay } from '@/lib/remote-play';
 
 // The RNTP patch adds playWhenReady to these; 4.1.2's types lack it.
@@ -13,7 +14,12 @@ interface CarPickFlag {
 }
 
 export async function PlaybackService(): Promise<void> {
-  const carPicks = createCarPicks(plog);
+  // A failed pick shows the car why (src/intents/car-errors.ts).
+  const carPicks = createCarPicks(plog, Date.now, {
+    show: ({ kind, message }) => showCarError(kind, message),
+    clear: clearCarError,
+    locked: activeStationLocked,
+  });
 
   // RemotePlay reloads with a cache-buster to discard the paused buffer,
   // through the app's player and its stream recovery while that is mounted

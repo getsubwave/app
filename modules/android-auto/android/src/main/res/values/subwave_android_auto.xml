@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What Android Auto shows. A driver must only be sent to the phone "when
+     it's safe to do so" (car app quality guideline VI-1). -->
+<resources>
+  <string name="subwave_car_stations">Stations</string>
+  <string name="subwave_car_empty_title">No stations yet</string>
+  <string name="subwave_car_empty_subtitle">When it\'s safe, add one in SUB/WAVE on your phone</string>
+  <string name="subwave_car_start_failed">SUB/WAVE couldn\'t start. When it\'s safe, open SUB/WAVE on your phone.</string>
+</resources>

@@ -13,6 +13,8 @@ import android.os.Process
  * gets no root. The service is exported, so without this any app could read
  * the saved stations' hosts and start the player in the background.
  *
+ * Google's Media Controller Test app passes too, in a debug build only.
+ *
  * Follows Google's media sample (UAMP's PackageValidator): this app, the
  * system UID, a platform-signed caller or one holding MEDIA_CONTENT_CONTROL
  * pass. For the Google apps, UAMP pins signing certificates; here a known
@@ -26,7 +28,14 @@ internal object CarCallers {
     "com.google.android.carassistant", // Assistant on Android Automotive
     "com.android.car.media", // Android Automotive's media centre
     "com.google.android.googlequicksearchbox", // Google app, Assistant
+    // Gemini (guideline VC-1). Unconfirmed as the package that binds in the
+    // car: check logcat on the Desktop Head Unit (docs/TESTING.md).
+    "com.google.android.apps.bard",
   )
+
+  // Google's Media Controller Test app (github.com/googlesamples/android-media-controller),
+  // sideloaded for testing: debug builds only.
+  private const val MEDIA_CONTROLLER_TEST = "com.example.android.mediacontroller"
   private const val PLAY_STORE = "com.android.vending"
 
   fun allowed(context: Context, packageName: String, uid: Int): Boolean {
@@ -38,8 +47,13 @@ internal object CarCallers {
     if (pm.checkPermission(Manifest.permission.MEDIA_CONTENT_CONTROL, packageName) ==
       PackageManager.PERMISSION_GRANTED
     ) return true
+    if (packageName == MEDIA_CONTROLLER_TEST) return isDebuggable(context)
     return packageName in GOOGLE_CALLERS && (isSystemApp(pm, packageName) || fromPlay(pm, packageName))
   }
+
+  // This app's own build, not the library's: a release build never passes.
+  private fun isDebuggable(context: Context): Boolean =
+    (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
   private fun isSystemApp(pm: PackageManager, packageName: String): Boolean = try {
     val flags = pm.getApplicationInfo(packageName, 0).flags

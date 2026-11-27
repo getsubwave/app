@@ -1,16 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <application>
-    <!-- Lists SUB/WAVE in Android Auto as a media app. -->
-    <meta-data
-      android:name="com.google.android.gms.car.application"
-      android:resource="@xml/subwave_automotive_app_desc" />
-
-    <service
-      android:name="com.getsubwave.androidauto.SubwaveBrowseService"
-      android:exported="true">
-      <intent-filter>
-        <action android:name="android.media.browse.MediaBrowserService" />
-      </intent-filter>
-    </service>
-  </application>
-</manifest>
+<!-- Declares nothing: plugins/withAndroidAuto.js adds SubwaveBrowseService and
+     the Android Auto meta-data to the app's manifest, only when
+     SUBWAVE_ANDROID_AUTO=1 at prebuild. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

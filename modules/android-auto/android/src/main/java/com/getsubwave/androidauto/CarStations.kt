@@ -32,15 +32,23 @@ internal object CarStations {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, json).apply()
   }
 
+  /** The saved stations, the one listened to last first. */
   fun load(context: Context): List<CarStation> {
     val json = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
       ?: return emptyList()
     return runCatching {
-      val stations = JSONObject(json).getJSONArray("stations")
-      (0 until stations.length()).map {
+      val root = JSONObject(json)
+      val active = root.optString("active").takeIf { !root.isNull("active") && it.isNotEmpty() }
+      val stations = root.getJSONArray("stations")
+      val list = (0 until stations.length()).map {
         val station = stations.getJSONObject(it)
         CarStation(station.getString("id"), station.getString("name"))
       }
+      activeFirst(list, active)
     }.getOrDefault(emptyList())
   }
+
+  // A stable sort: the rest keep the order JS gave them (most recent first).
+  fun activeFirst(stations: List<CarStation>, active: String?): List<CarStation> =
+    if (active == null) stations else stations.sortedBy { if (it.id == active) 0 else 1 }
 }

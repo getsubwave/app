@@ -104,6 +104,7 @@
         }
       ],
       "./plugins/withAndroidUserCaTrust",
+      "./plugins/withAndroidAuto",
       "./plugins/withGradleMemory",
       [
         "expo-secure-store",

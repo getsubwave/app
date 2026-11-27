@@ -14,6 +14,17 @@ import { splitStationAddress, type StoredStationRef } from '../lib/station-crede
 import { findSavedStation, matchStations, stationsForSiri } from '../lib/station-store';
 import { NO_STATION_MESSAGE } from './station-messages';
 
+/** Why a tune-in failed, for a caller that says more than Siri's message:
+ *  Android Auto (src/intents/car-errors.ts). The Swift bridge reads only
+ *  `ok` and `message`. */
+export type TuneFailure = 'not-saved' | 'no-station' | 'unreachable';
+
+export interface TuneReply extends IntentReply {
+  reason?: TuneFailure;
+  /** The station a failed load was for, when its name is known. */
+  station?: string;
+}
+
 export const NOT_SAVED_MESSAGE = "That station isn't saved in SUB/WAVE. Add it in the app first.";
 
 /** How long a switch waits for StationContext to hand the player the new
@@ -54,11 +65,11 @@ export async function tuneIn(
   deps: TuneDeps,
   stationId: string | undefined,
   deadline: number,
-): Promise<IntentReply> {
+): Promise<TuneReply> {
   if (stationId) {
     const store = await deps.loadStore();
     const wanted = findSavedStation(store.recents, stationId);
-    if (!wanted) return { ok: false, message: NOT_SAVED_MESSAGE };
+    if (!wanted) return { ok: false, message: NOT_SAVED_MESSAGE, reason: 'not-saved' };
     const active = store.activeStation ? splitStationAddress(store.activeStation).base : null;
     if (splitStationAddress(wanted.url).base !== active) return switchTo(deps, wanted, deadline);
   }
@@ -77,7 +88,7 @@ export async function tuneIn(
   // when loaded here: a stored format preference is only honoured once the
   // station's feed confirms the mount, and usePlayer retunes onto it then.
   const station = await deps.activeStation();
-  if (!station) return { ok: false, message: NO_STATION_MESSAGE };
+  if (!station) return { ok: false, message: NO_STATION_MESSAGE, reason: 'no-station' };
   return started(
     deps,
     station.name,
@@ -92,7 +103,7 @@ export async function tuneInByName(
   deps: TuneDeps,
   query: string,
   deadline: number,
-): Promise<IntentReply> {
+): Promise<TuneReply> {
   const store = await deps.loadStore();
   const [match] = matchStations(stationsForSiri(store.recents), query);
   return tuneIn(deps, match?.id, deadline);
@@ -113,7 +124,7 @@ async function switchTo(
   deps: TuneDeps,
   ref: StoredStationRef,
   deadline: number,
-): Promise<IntentReply> {
+): Promise<TuneReply> {
   const base = splitStationAddress(ref.url).base;
   await deps.setActiveStation(ref);
 
@@ -139,7 +150,7 @@ async function switchTo(
   const station = await deps.activeStation();
   if (!station) {
     deps.announceSwitch();
-    return { ok: false, message: NO_STATION_MESSAGE };
+    return { ok: false, message: NO_STATION_MESSAGE, reason: 'no-station' };
   }
   const ok = await deps.startAndWait(async () => {
     try {
@@ -152,7 +163,7 @@ async function switchTo(
   return started(deps, station.name ?? ref.name, ok);
 }
 
-function started(deps: TuneDeps, stationName: string | null, ok: boolean): IntentReply {
+function started(deps: TuneDeps, stationName: string | null, ok: boolean): TuneReply {
   // With a player mounted it owns the control's state, failures included: it
   // stays tuned in through its own backoff.
   if (ok) deps.setOnAir(true);
@@ -160,15 +171,17 @@ function started(deps: TuneDeps, stationName: string | null, ok: boolean): Inten
   return ok ? { ok: true } : failed(stationName);
 }
 
-export function failed(stationName: string | null): IntentReply {
+export function failed(stationName: string | null): TuneReply {
   const station = stationName ?? 'the station';
   return {
     ok: false,
     message: `Couldn't reach ${station}. If it's private, open SUB/WAVE to unlock it.`,
+    reason: 'unreachable',
+    ...(stationName ? { station: stationName } : {}),
   };
 }
 
-export async function tuneOut(deps: TuneDeps): Promise<IntentReply> {
+export async function tuneOut(deps: TuneDeps): Promise<TuneReply> {
   deps.log('intent tune-out');
   await deps.tuneOut().catch(() => {});
   deps.setOnAir(false);
