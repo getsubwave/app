@@ -7,6 +7,7 @@ import TrackPlayer, {
   State,
 } from 'react-native-track-player';
 import { createAnnouncer } from '@/lib/announcer';
+import { setLeadTrimMs } from '@/lib/heard-track';
 import { playbackLog } from '@/lib/playback-log';
 
 const STREAM_TRACK_ID = 'subwave-live';
@@ -76,6 +77,8 @@ export async function loadAndPlay(meta: LiveTrackMeta): Promise<void> {
   // RNTP carries the rate over to the next item; an idle skip's 8x must never
   // reach a new connection's music (src/lib/idle-skip-playback.ts).
   await TrackPlayer.setRate(1).catch(() => {});
+  // A new connection carries its whole buffer again.
+  setLeadTrimMs(0);
   const bust = `${meta.url}${meta.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
   await TrackPlayer.load({
     id: STREAM_TRACK_ID,

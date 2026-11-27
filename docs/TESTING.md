@@ -360,7 +360,8 @@ request is in; a POST still unanswered at the deadline is said as sent too,
 since "try again" would queue it twice. **What's playing** and **Like
 this song** both mean the track the listener is hearing: while the app is
 playing, that is the previous track for the stream buffer's length after a
-change (`src/lib/heard-track.ts`, the rule `useStationFeed` promotes tracks by).
+change, less whatever the idle skip shed (`src/lib/heard-track.ts`, the rule
+`useStationFeed` promotes tracks by).
 The like goes through `POST /like`, which refuses a song that has ended, and
 the in-app heart and the Live Activity fill straight away (`like-events.ts`).
 The Live Activity's own heart is `LikeTrackIntent`, hidden from Shortcuts so

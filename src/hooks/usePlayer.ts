@@ -20,6 +20,7 @@ import {
   teardown,
 } from '@/audio/player';
 import type { StationApi } from '@/lib/api';
+import { setLeadTrimMs } from '@/lib/heard-track';
 import { SKIP_CUSHION_SECONDS } from '@/lib/idle-skip';
 import { IdleSkip } from '@/lib/idle-skip-playback';
 import { playbackEventLine, playbackLog } from '@/lib/playback-log';
@@ -81,11 +82,16 @@ export function usePlayer(
   useEffect(() => { bufferSecondsRef.current = idle.bufferSeconds; }, [idle.bufferSeconds]);
   useEffect(() => { onLeadTrimRef.current = idle.onLeadTrim; }, [idle.onLeadTrim]);
   const idleSkipRef = useRef<IdleSkip | null>(null);
+  // To the feed, and to the App Intents, which have no screen to ask.
+  const reportTrim = useCallback((ms: number) => {
+    setLeadTrimMs(ms);
+    onLeadTrimRef.current?.(ms);
+  }, []);
   const endIdleSkip = useCallback(() => {
     idleSkipRef.current?.cancel();
     idleSkipRef.current = null;
-    onLeadTrimRef.current?.(0);
-  }, []);
+    reportTrim(0);
+  }, [reportTrim]);
   // MP3 only: its burst is CBR, so bufferSeconds sizes it. An older broadcast
   // image's Opus burst is VBR and reaches back past the pause into music.
   const startIdleSkip = useCallback((a: StationApi): IdleSkip | null => {
@@ -98,12 +104,12 @@ export function usePlayer(
       readState: (signal) => a.state(signal),
       position: () => TrackPlayer.getProgress().then((p) => p.position),
       setRate: (rate) => TrackPlayer.setRate(rate),
-      onTrim: (ms) => onLeadTrimRef.current?.(ms),
+      onTrim: reportTrim,
       log: plog,
     });
     idleSkipRef.current = skip;
     return skip;
-  }, [endIdleSkip]);
+  }, [endIdleSkip, reportTrim]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {

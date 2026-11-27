@@ -4,7 +4,7 @@ import type { StationApi } from '@/lib/api';
 import { feedState } from '@/lib/feed-state';
 import { pollAsync } from '@/lib/poll';
 import { DEFAULT_STATION_LOCALE, type StationLocale } from '@/lib/format';
-import { audibleAt as audibleAtLiveEdge, leadMsFrom } from '@/lib/heard-track';
+import { audibleAt as audibleAtLiveEdge, leadMsFrom, listenerLeadMs } from '@/lib/heard-track';
 import { splitAudibleTurns } from '@/lib/sessionFeed';
 import { trackElapsedSeconds } from '@/lib/track-progress';
 import type {
@@ -140,7 +140,7 @@ export function useStationFeed(
   useEffect(() => {
     if (leadTrimMs === trimMsRef.current) return;
     trimMsRef.current = leadTrimMs;
-    const next = Math.max(0, bufferMsRef.current - leadTrimMs);
+    const next = listenerLeadMs(bufferMsRef.current, leadTrimMs);
     const delta = next - leadMsRef.current;
     leadMsRef.current = next;
     setLeadMs(next);
@@ -164,7 +164,7 @@ export function useStationFeed(
       const buf = leadMsFrom(npRes.stream?.bufferSeconds);
       if (buf != null) {
         bufferMsRef.current = buf;
-        leadMsRef.current = Math.max(0, buf - trimMsRef.current);
+        leadMsRef.current = listenerLeadMs(buf, trimMsRef.current);
         setLeadMs(leadMsRef.current);
       }
       const trackKey = np ? `${np.title}\0${np.artist}` : null;

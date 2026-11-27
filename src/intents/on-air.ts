@@ -5,7 +5,7 @@
 
 import type { IntentReply } from '../../modules/app-intents';
 import { isOnAir, playbackStateNow } from '@/audio/player';
-import { heardTrack, leadMsFrom } from '@/lib/heard-track';
+import { heardTrack, leadMsFrom, leadTrimMs, listenerLeadMs } from '@/lib/heard-track';
 import { announceLike } from '@/lib/like-events';
 import type { StationApi } from '@/lib/api';
 import {
@@ -36,7 +36,7 @@ async function snapshot(api: StationApi): Promise<OnAirSnapshot> {
     live,
     previous: stateRes.value.history?.[0] ?? null,
     liveStartMs: Number.isFinite(stamp) ? stamp : null,
-    leadMs: leadMsFrom(np.stream?.bufferSeconds) ?? 0,
+    leadMs: listenerLeadMs(leadMsFrom(np.stream?.bufferSeconds) ?? 0, leadTrimMs()),
     now: Date.now(),
   });
   return { reachable: true, online, track };

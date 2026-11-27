@@ -5,7 +5,14 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { audibleAt, heardTrack, leadMsFrom } from '../src/lib/heard-track.ts';
+import {
+  audibleAt,
+  heardTrack,
+  leadMsFrom,
+  leadTrimMs,
+  listenerLeadMs,
+  setLeadTrimMs,
+} from '../src/lib/heard-track.ts';
 import {
   likeReply,
   likeTarget,
@@ -35,6 +42,28 @@ test('for the buffer’s length after a change, the listener still hears the pre
 test('with no live-edge stamp, or nothing before it, the live track is the answer', () => {
   assert.equal(heardTrack({ live, previous, liveStartMs: null, leadMs: 22_000, now: 0 }), live);
   assert.equal(heardTrack({ live, previous: null, liveStartMs: 100_000, leadMs: 22_000, now: 110_000 }), live);
+});
+
+test('after an idle skip the listener is nearer the live edge by what it shed', () => {
+  // A 22 s buffer with 17 s of a woken station's silence played fast: the new
+  // track reaches the listener 5 s after the live edge, not 22.
+  const leadMs = listenerLeadMs(22_000, 17_000);
+  assert.equal(leadMs, 5_000);
+  const at = (now: number) => heardTrack({ live, previous, liveStartMs: 100_000, leadMs, now });
+  assert.equal(at(104_999), previous);
+  assert.equal(at(105_000), live);
+  // Never ahead of the live edge, and a bad trim sheds nothing.
+  assert.equal(listenerLeadMs(5_000, 9_000), 0);
+  assert.equal(listenerLeadMs(22_000, -1), 22_000);
+});
+
+test('the trim the intents read follows the player, and a bad value reads as none', () => {
+  setLeadTrimMs(12_000);
+  assert.equal(leadTrimMs(), 12_000);
+  setLeadTrimMs(Number.NaN);
+  assert.equal(leadTrimMs(), 0);
+  setLeadTrimMs(-3);
+  assert.equal(leadTrimMs(), 0);
 });
 
 const snap = (over: Partial<OnAirSnapshot> = {}): OnAirSnapshot => ({
