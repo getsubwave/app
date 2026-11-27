@@ -4,7 +4,8 @@ import type { StationApi } from '@/lib/api';
 import { feedState } from '@/lib/feed-state';
 import { pollAsync } from '@/lib/poll';
 import { DEFAULT_STATION_LOCALE, type StationLocale } from '@/lib/format';
-import { MAX_LEAD_SECONDS, splitAudibleTurns } from '@/lib/sessionFeed';
+import { audibleAt as audibleAtLiveEdge, leadMsFrom, listenerLeadMs } from '@/lib/heard-track';
+import { splitAudibleTurns } from '@/lib/sessionFeed';
 import { trackElapsedSeconds } from '@/lib/track-progress';
 import type {
   ActiveShow,
@@ -139,7 +140,7 @@ export function useStationFeed(
   useEffect(() => {
     if (leadTrimMs === trimMsRef.current) return;
     trimMsRef.current = leadTrimMs;
-    const next = Math.max(0, bufferMsRef.current - leadTrimMs);
+    const next = listenerLeadMs(bufferMsRef.current, leadTrimMs);
     const delta = next - leadMsRef.current;
     leadMsRef.current = next;
     setLeadMs(next);
@@ -158,10 +159,12 @@ export function useStationFeed(
 
     const applyNowPlaying = (npRes: NowPlayingResponse, current?: StationState['current']) => {
       const np = npRes.nowPlaying;
-      const bufSec = npRes.stream?.bufferSeconds;
-      if (typeof bufSec === 'number' && Number.isFinite(bufSec)) {
-        bufferMsRef.current = Math.min(Math.max(bufSec, 0), MAX_LEAD_SECONDS) * 1000;
-        leadMsRef.current = Math.max(0, bufferMsRef.current - trimMsRef.current);
+      // Buffer depth first; everything below is measured against it, less
+      // whatever the idle skip shed.
+      const buf = leadMsFrom(npRes.stream?.bufferSeconds);
+      if (buf != null) {
+        bufferMsRef.current = buf;
+        leadMsRef.current = listenerLeadMs(buf, trimMsRef.current);
         setLeadMs(leadMsRef.current);
       }
       const trackKey = np ? `${np.title}\0${np.artist}` : null;
@@ -171,7 +174,12 @@ export function useStationFeed(
         const t = Date.parse(current.startedAt);
         if (Number.isFinite(t) && t <= Date.now()) serverStart = t;
       }
-      const audibleAt = Number.isFinite(serverStart) ? serverStart + leadMsRef.current : Date.now();
+      // Shift into listener-time: the audio arrives leadMs after the live edge.
+      // With no server stamp, fall back to first-seen (no offset); the next
+      // foreground tick carries /state and repairs it in the converge branch.
+      const audibleAt = Number.isFinite(serverStart)
+        ? audibleAtLiveEdge(serverStart, leadMsRef.current)
+        : Date.now();
 
       if (trackKey !== lastTrackKeyRef.current) {
         const commit = () => {

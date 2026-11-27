@@ -31,6 +31,10 @@
           "UIInterfaceOrientationLandscapeRight"
         ],
         "NSSupportsLiveActivities": true,
+        "INAlternativeAppNames": [
+          { "INAlternativeAppName": "Sub Wave" },
+          { "INAlternativeAppName": "Subwave" }
+        ],
         "NSLocalNetworkUsageDescription": "SUB/WAVE uses the local network to find Google Cast speakers and TVs on your Wi-Fi so you can send the station to them.",
         "UIBackgroundModes": [
           "audio"
@@ -87,7 +91,8 @@
             "usesCleartextTraffic": true
           },
           "ios": {
-            "deploymentTarget": "16.4"
+            "deploymentTarget": "16.4",
+            "enableSceneSupport": true
           }
         }
       ],

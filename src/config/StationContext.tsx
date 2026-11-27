@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { setStations } from '../../modules/app-intents';
 import { teardown } from '@/audio/player';
 import { createApi, type StationApi } from '@/lib/api';
 import {
@@ -15,7 +16,8 @@ import {
   featuredStation,
   loadStationCredentials,
   loadStationPassword,
-  loadStations,
+  onStationStoreChanged,
+  readActiveStationState,
   removeRecent,
   saveStationCredentials,
   saveStationPassword,
@@ -24,6 +26,7 @@ import {
   type StationStore,
 } from '@/lib/station';
 import { splitStationAddress, type StationCredentials } from '@/lib/station-credentials';
+import { stationsForSiri } from '@/lib/station-store';
 
 interface StationContextValue {
   ready: boolean;
@@ -65,23 +68,11 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    loadStations().then(async (s) => {
-      let activeCredentials: StationCredentials | null = null;
-      let activePassword: string | null = null;
-      try {
-        activeCredentials = s.activeStation
-          ? await loadStationCredentials(s.activeStation)
-          : null;
-      } catch {
-      }
-      try {
-        activePassword = s.activeStation ? await loadStationPassword(s.activeStation) : null;
-      } catch {
-      }
+    readActiveStationState().then((s) => {
       if (alive) {
-        setStore(s);
-        setCredentials(activeCredentials);
-        setStationPassword(activePassword);
+        setStore(s.store);
+        setCredentials(s.credentials);
+        setStationPassword(s.password);
         setReady(true);
       }
     }).catch(() => {
@@ -91,6 +82,23 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [setStationPassword]);
+
+  // A station switch from Siri, Shortcuts or Spotlight (src/intents/tune.ts)
+  // writes the store and starts the new stream itself; follow it. No teardown,
+  // unlike selectStation: the stream already playing is the new station's.
+  useEffect(
+    () =>
+      onStationStoreChanged(() => {
+        readActiveStationState()
+          .then((s) => {
+            setCredentials(s.credentials);
+            setStationPassword(s.password);
+            setStore(s.store);
+          })
+          .catch(() => {});
+      }),
+    [setStationPassword],
+  );
 
   const selectStation = useCallback(async (
     ref: StationRef,
@@ -161,6 +169,12 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
     if (!base) return null;
     return store.recents.find((r) => r.url === base)?.name ?? null;
   }, [base, store.recents]);
+
+  // Siri, Shortcuts and Spotlight know the saved stations by name, and cannot
+  // read this store.
+  useEffect(() => {
+    if (ready) setStations(base, stationsForSiri(store.recents));
+  }, [ready, base, store.recents]);
 
   const value = useMemo<StationContextValue>(
     () => ({

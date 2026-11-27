@@ -9,13 +9,24 @@ import {
   addAudioRouteChangeListener,
   ROUTE_REASON_OLD_DEVICE_UNAVAILABLE,
 } from '../../modules/airplay-route-picker';
-import { getLastLiveMeta, loadAndPlay, setupPlayer, teardown } from '@/audio/player';
+import { setOnAir } from '../../modules/app-intents';
+import {
+  getLastLiveMeta,
+  isOnAir,
+  loadAndPlay,
+  onExternalTuneOut,
+  playbackStateNow,
+  setupPlayer,
+  teardown,
+} from '@/audio/player';
 import type { StationApi } from '@/lib/api';
+import { setLeadTrimMs } from '@/lib/heard-track';
 import { SKIP_CUSHION_SECONDS } from '@/lib/idle-skip';
 import { IdleSkip } from '@/lib/idle-skip-playback';
 import { playbackEventLine, playbackLog } from '@/lib/playback-log';
-import { claimRemotePlay } from '@/lib/remote-play';
+import { claimRemotePlay, takeArrival } from '@/lib/remote-play';
 import { MAX_LEAD_SECONDS } from '@/lib/sessionFeed';
+import { streamBelongsTo } from '@/lib/station-store';
 import { StreamRecovery } from '@/lib/stream-recovery';
 import type { StreamFormat } from '@/lib/streamFormat';
 import { loadVolumePref, saveVolumePref } from '@/lib/volume';
@@ -71,11 +82,16 @@ export function usePlayer(
   useEffect(() => { bufferSecondsRef.current = idle.bufferSeconds; }, [idle.bufferSeconds]);
   useEffect(() => { onLeadTrimRef.current = idle.onLeadTrim; }, [idle.onLeadTrim]);
   const idleSkipRef = useRef<IdleSkip | null>(null);
+  // To the feed, and to the App Intents, which have no screen to ask.
+  const reportTrim = useCallback((ms: number) => {
+    setLeadTrimMs(ms);
+    onLeadTrimRef.current?.(ms);
+  }, []);
   const endIdleSkip = useCallback(() => {
     idleSkipRef.current?.cancel();
     idleSkipRef.current = null;
-    onLeadTrimRef.current?.(0);
-  }, []);
+    reportTrim(0);
+  }, [reportTrim]);
   // MP3 only: its burst is CBR, so bufferSeconds sizes it. An older broadcast
   // image's Opus burst is VBR and reaches back past the pause into music.
   const startIdleSkip = useCallback((a: StationApi): IdleSkip | null => {
@@ -88,12 +104,12 @@ export function usePlayer(
       readState: (signal) => a.state(signal),
       position: () => TrackPlayer.getProgress().then((p) => p.position),
       setRate: (rate) => TrackPlayer.setRate(rate),
-      onTrim: (ms) => onLeadTrimRef.current?.(ms),
+      onTrim: reportTrim,
       log: plog,
     });
     idleSkipRef.current = skip;
     return skip;
-  }, [endIdleSkip]);
+  }, [endIdleSkip, reportTrim]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
@@ -107,6 +123,17 @@ export function usePlayer(
   }, []);
 
   const recoveryRef = useRef<StreamRecovery | null>(null);
+  // Every tune-out the listener makes away from the Stop button: a lock-screen
+  // pause, an App Intent, a vanished route. The ref flips synchronously, ahead
+  // of the Stopped event, which would otherwise read as a dead stream.
+  const tunedOut = useCallback(() => {
+    recoveryRef.current?.tuneOut();
+    endIdleSkip();
+    tunedInRef.current = false;
+    setTunedIn(false);
+    setStatus('idle');
+  }, [endIdleSkip]);
+
   useEffect(() => {
     const recovery = new StreamRecovery({
       position: () => TrackPlayer.getProgress().then((p) => p.position),
@@ -183,11 +210,7 @@ export function usePlayer(
     (event) => {
       plog(playbackEventLine(event));
       if (event.type === Event.RemotePause || event.type === Event.RemoteStop) {
-        recoveryRef.current?.tuneOut();
-        endIdleSkip();
-        tunedInRef.current = false;
-        setTunedIn(false);
-        setStatus('idle');
+        tunedOut();
         return;
       }
       if (event.type === Event.RemoteDuck) {
@@ -219,6 +242,34 @@ export function usePlayer(
     },
   );
 
+  // A tune-in that started before this hook mounted: an App Intent can launch
+  // the app into the background and start the stream (src/intents/tune.ts)
+  // while the screens are still loading, so the Playing event that would
+  // adopt it has already fired.
+  useEffect(() => {
+    let alive = true;
+    void playbackStateNow().then((state) => {
+      if (!alive || tunedInRef.current || !getLastLiveMeta() || !isOnAir(state)) return;
+      tunedInRef.current = true;
+      setTunedIn(true);
+      setStatus(state === State.Playing ? 'playing' : 'connecting');
+      recoveryRef.current?.adopt();
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // The tune control (targets/live-activity/TuneControl.swift) cannot ask the
+  // player, so it shows this. Written on mount too, which clears a flag an
+  // app killed mid-song left on.
+  useEffect(() => {
+    setOnAir(tunedIn);
+  }, [tunedIn]);
+
+  // An App Intent tune-out (src/intents/tune.ts), handled like RemotePause.
+  useEffect(() => onExternalTuneOut(tunedOut), [tunedOut]);
+
   // iOS: an oldDeviceUnavailable route change (Bluetooth speaker off, CarPlay
   // disconnected, headphones unplugged) is a tune-out (#992) — the
   // longFormAudio session policy keeps AVPlayer "playing" to the vanished
@@ -229,16 +280,12 @@ export function usePlayer(
     const sub = addAudioRouteChangeListener((e) => {
       plog(`route change reason=${e.reason} outputs=${e.outputs}`);
       if (e.reason !== ROUTE_REASON_OLD_DEVICE_UNAVAILABLE || !tunedInRef.current) return;
-      recoveryRef.current?.tuneOut();
-      endIdleSkip();
-      tunedInRef.current = false;
-      setTunedIn(false);
-      setStatus('idle');
+      tunedOut();
       // stop(), not pause: unloads the item so the Icecast connection drops.
       TrackPlayer.stop().catch(() => {});
     });
     return () => sub?.remove();
-  }, [endIdleSkip]);
+  }, [tunedOut]);
 
   const prevConnectedRef = useRef(isConnected);
   useEffect(() => {
@@ -257,13 +304,36 @@ export function usePlayer(
     teardown().catch(() => {});
   }, [endIdleSkip]);
 
+  // On a station switch selectStation has already torn the stream down at the
+  // RNTP level; drop local tuned-in state so the UI doesn't claim "on air"
+  // over dead audio. (The event handler ignores State.None because reset()
+  // also fires it mid tune-in and mid reconnect.)
+  // Two exceptions, both a switch from Siri, Shortcuts or Spotlight
+  // (src/intents/tune.ts). With this player mounted, the intent asks for a
+  // tune-in on the new station, which goes through StreamRecovery in place of
+  // the stop: its load replaces the old item, so nothing is torn down under
+  // it. With none mounted, the intent started the new stream itself before
+  // the base changed here, and a stream that already belongs to the new base
+  // is kept.
   const prevBaseRef = useRef(api?.base ?? null);
   useEffect(() => {
     const nextBase = api?.base ?? null;
     if (prevBaseRef.current === nextBase) return;
     prevBaseRef.current = nextBase;
-    if (tunedInRef.current) stop();
-  }, [api, stop]);
+    const recovery = recoveryRef.current;
+    if (nextBase && recovery && takeArrival(nextBase)) {
+      plog('intent station switch: tuning in on the new station');
+      endIdleSkip();
+      tunedInRef.current = true;
+      setTunedIn(true);
+      setStatus('connecting');
+      recovery.tuneIn('remote');
+      return;
+    }
+    const meta = getLastLiveMeta();
+    const adopted = !!(nextBase && meta && streamBelongsTo(meta.url, nextBase));
+    if (tunedInRef.current && !adopted) stop();
+  }, [api, stop, endIdleSkip]);
 
   const prevFormatRef = useRef(streamFormat);
   useEffect(() => {

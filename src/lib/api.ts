@@ -64,8 +64,9 @@ export interface StationApi {
   /** Like the currently playing track (#991). `songId` is what the client
    *  believes is on air; the controller rejects a stale tap. Error statuses
    *  come back as a LikeResult with `error`; null when no answer could be read:
-   *  a network error, a body that is not JSON, or one that never arrives. */
-  likeCurrent(songId: string): Promise<LikeResult | null>;
+   *  a network error, a body that is not JSON, one that never arrives, or
+   *  the caller's abort. */
+  likeCurrent(songId: string, signal?: AbortSignal): Promise<LikeResult | null>;
   /** Liked-state + count for the current airing. null as for likeCurrent. */
   likeStatus(): Promise<LikeStatus | null>;
   /** Fire-and-forget audience beacon; all failures are swallowed. */
@@ -272,10 +273,11 @@ export function createApi(
       if (res.status === 404) return { success: false, status: 'unknown' };
       return (await readJson(res)) as RequestResult;
     },
-    likeCurrent: async (songId) => {
+    likeCurrent: async (songId, signal) => {
       try {
         const res = await send('/like', {
           method: 'POST',
+          signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ songId }),
         });

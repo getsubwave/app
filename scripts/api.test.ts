@@ -691,6 +691,22 @@ for (const [name, call] of SIGNALLED) {
   }
 }
 
+for (const aborted of ABORTED_READS) {
+  test(`a caller's abort mid-body cancels likeCurrent's POST, answered as no answer (a read that ${aborted})`, async (t) => {
+    // Siri's "like this song" lands here at the bridge's deadline.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const sent = stubFetch(t, (signal) => new Response(stalledBody(signal, aborted, '{"ok":true')));
+    const caller = new AbortController();
+    const liking = watch(createApi('https://radio.example', LOGIN).likeCurrent('song-1', caller.signal));
+    await settle();
+    assert.equal(sent[0].signal.aborted, false);
+    caller.abort();
+    assert.equal(sent[0].signal.aborted, true);
+    await settle();
+    assert.deepEqual(liking.outcome, { value: null });
+  });
+}
+
 test("a caller's abort that lands with the headers still ends the read", async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const caller = new AbortController();

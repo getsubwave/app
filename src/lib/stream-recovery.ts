@@ -178,8 +178,9 @@ export class StreamRecovery {
     void this.reload(reason, null, true);
   }
 
-  /** Playback this hook didn't start (service.ts loaded it while the player
-   *  wasn't mounted): watch it, no reload. */
+  /** Playback the player didn't start, loaded while it wasn't mounted: by
+   *  service.ts (Android's headless service) or by an App Intent
+   *  (src/intents/tune.ts, a cold Siri launch). Watch it, no reload. */
   adopt(): void {
     this.begin();
   }

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
+import { createAnnouncer } from './announcer';
 import { createCredentialVault } from './credential-vault';
 import {
   migrateLegacyStationStore,
@@ -143,4 +144,32 @@ export async function clearActiveStation(): Promise<StationStore> {
   const next: StationStore = { activeStation: null, recents: store.recents };
   await persist(next);
   return next;
+}
+
+// A change to the stored active station made outside StationContext: a
+// station switch from Siri, Shortcuts or Spotlight (src/intents/tune.ts).
+// StationContext reloads the store on it, so the screens follow.
+const storeChanges = createAnnouncer();
+
+export const onStationStoreChanged = storeChanges.subscribe;
+
+export function announceStationStoreChanged(): void {
+  storeChanges.announce();
+}
+
+/** The store, and the active station's login and station password, read the
+ *  way StationContext reads them at boot and an App Intent reads them with no
+ *  screen mounted. A keychain failure reads as none, so boot never fails on it:
+ *  later actions report the failure and leave the vault intact, and a locked
+ *  station asks again. */
+export async function readActiveStationState(): Promise<{
+  store: StationStore;
+  credentials: StationCredentials | null;
+  password: string | null;
+}> {
+  const store = await loadStations();
+  const base = store.activeStation;
+  const credentials = base ? await loadStationCredentials(base).catch(() => null) : null;
+  const password = base ? await loadStationPassword(base).catch(() => null) : null;
+  return { store, credentials, password };
 }
