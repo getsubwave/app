@@ -16,7 +16,7 @@ import com.facebook.react.jstasks.HeadlessJsTaskContext
  * what launched the app: there is no activity, so nothing else will.
  */
 internal object CarConnectTask {
-  // Matched by STRING with src/intents/car.ts.
+  // Matched by STRING with src/intents/car.ts (npm test checks).
   private const val TASK = "SubwaveCarConnect"
   private const val TIMEOUT_MS = 30_000L
 

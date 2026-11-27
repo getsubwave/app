@@ -2,6 +2,7 @@ package com.getsubwave.androidauto
 
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat.MediaItem
+import android.support.v4.media.session.MediaSessionCompat
 import androidx.media.MediaBrowserServiceCompat
 import com.doublesymmetry.trackplayer.service.MediaBrowserBridge
 
@@ -18,17 +19,33 @@ import com.doublesymmetry.trackplayer.service.MediaBrowserBridge
  * only exists once JS has set the player up. So the first connection starts
  * React Native and runs the car-connect task (CarConnectTask), and the car's
  * connection completes when the session token arrives.
+ *
+ * MediaBrowserServiceCompat takes a session token once, so an instance whose
+ * session ended (its MusicService was destroyed) can't take the next one. It
+ * stops answering instead: once its clients unbind it is destroyed, and the
+ * car's next bind creates an instance that waits for the new session.
  */
 class SubwaveBrowseService : MediaBrowserServiceCompat() {
-  override fun onCreate() {
-    super.onCreate()
-    current = this
-    MediaBrowserBridge.whenSessionReady { token ->
+  private var sessionEnded = false
+
+  private val session = object : MediaBrowserBridge.SessionListener {
+    override fun ready(token: MediaSessionCompat.Token) {
       if (sessionToken == null) sessionToken = token
+    }
+
+    override fun ended() {
+      if (sessionToken != null) sessionEnded = true
     }
   }
 
+  override fun onCreate() {
+    super.onCreate()
+    current = this
+    MediaBrowserBridge.addListener(session)
+  }
+
   override fun onDestroy() {
+    MediaBrowserBridge.removeListener(session)
     current = null
     MediaBrowserBridge.browsing = false
     super.onDestroy()
@@ -39,6 +56,11 @@ class SubwaveBrowseService : MediaBrowserServiceCompat() {
     // A live station has nothing to resume, and answering would start the app
     // in the background on every boot.
     if (rootHints?.getBoolean(BrowserRoot.EXTRA_RECENT) == true) return null
+    // Only the car, the Assistant and the system: anything else that binds
+    // would read the saved stations and start the app in the background.
+    if (!CarCallers.allowed(this, clientPackageName, clientUid)) return null
+    // This instance holds a released session's token and can't take another.
+    if (sessionEnded) return null
     MediaBrowserBridge.browsing = true
     if (sessionToken == null) CarConnectTask.run(application)
     return BrowserRoot(ROOT, ROOT_EXTRAS)

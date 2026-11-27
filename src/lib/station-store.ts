@@ -70,7 +70,8 @@ export function stationsForSiri(recents: StoredStationRef[]): MirroredStation[] 
  *  first, else a name containing the term or contained in it. A generic word
  *  names no station, so "play radio" stays on the one listened to last.
  *  The same rule as Siri's, SavedStations.matching in
- *  targets/live-activity/_shared/StationEntities.swift: change both. */
+ *  targets/live-activity/_shared/StationEntities.swift: change both
+ *  (npm test checks the generic words and the shortest term). */
 export function matchStations(stations: MirroredStation[], term: string): MirroredStation[] {
   const wanted = foldName(term);
   if (wanted.length < 3 || GENERIC_TERMS.has(wanted)) return [];

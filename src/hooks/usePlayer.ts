@@ -31,7 +31,8 @@ import { StreamRecovery } from '@/lib/stream-recovery';
 import type { StreamFormat } from '@/lib/streamFormat';
 import { loadVolumePref, saveVolumePref } from '@/lib/volume';
 
-function plog(msg: string) {
+/** A playback line: redacted into the Share playback log, and printed in dev. */
+export function plog(msg: string) {
   playbackLog.add(msg);
   if (__DEV__) console.log(`[player ${new Date().toISOString().slice(11, 23)}] ${msg}`);
 }

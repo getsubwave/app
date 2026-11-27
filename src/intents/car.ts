@@ -7,7 +7,7 @@
 import { AppRegistry, Platform } from 'react-native';
 import { setupPlayer } from '@/audio/player';
 
-// Matched by STRING with modules/android-auto/…/CarConnectTask.kt.
+// Matched by STRING with modules/android-auto/…/CarConnectTask.kt (npm test checks).
 const CAR_CONNECT_TASK = 'SubwaveCarConnect';
 
 /** Call once, early, outside the React tree: the car can start the app with

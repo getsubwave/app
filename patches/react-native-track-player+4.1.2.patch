@@ -521,10 +521,10 @@ index b2409a0..38187bc 100644
      }
 diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt
 new file mode 100644
-index 0000000..f0c6cb7
+index 0000000..e222c94
 --- /dev/null
 +++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MediaBrowserBridge.kt
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,117 @@
 +package com.doublesymmetry.trackplayer.service
 +
 +import android.net.Uri
@@ -551,15 +551,31 @@ index 0000000..f0c6cb7
 +    @JvmStatic
 +    var browsing = false
 +
-+    private var token: MediaSessionCompat.Token? = null
-+    private val waiting = mutableListOf<(MediaSessionCompat.Token) -> Unit>()
++    /** A media browser service waiting on the player's session. */
++    interface SessionListener {
++        /** The player's session exists: publish [token]. */
++        fun ready(token: MediaSessionCompat.Token)
++        /** That session was released with its MusicService: a token already
++         *  published is dead. */
++        fun ended()
++    }
 +
-+    /** Calls [ready] with the player's session token now, or once setupPlayer
-+     *  has created the player. */
++    private var token: MediaSessionCompat.Token? = null
++    private val listeners = mutableSetOf<SessionListener>()
++
++    /** Calls [listener] with the player's session token now, or once setupPlayer
++     *  has created the player, and again for each session after it. */
 +    @MainThread
 +    @JvmStatic
-+    fun whenSessionReady(ready: (MediaSessionCompat.Token) -> Unit) {
-+        token?.let(ready) ?: waiting.add(ready)
++    fun addListener(listener: SessionListener) {
++        listeners.add(listener)
++        token?.let(listener::ready)
++    }
++
++    @MainThread
++    @JvmStatic
++    fun removeListener(listener: SessionListener) {
++        listeners.remove(listener)
 +    }
 +
 +    @MainThread
@@ -570,9 +586,16 @@ index 0000000..f0c6cb7
 +        connector.setPlaybackPreparer(Preparer(player, emit))
 +        val session = connector.mediaSession.sessionToken
 +        token = session
-+        val ready = waiting.toList()
-+        waiting.clear()
-+        ready.forEach { it(session) }
++        listeners.toList().forEach { it.ready(session) }
++    }
++
++    /** MusicService is going, and its session with it: a browser that binds
++     *  after this waits for the next setupPlayer instead of taking a dead token. */
++    @MainThread
++    internal fun detach() {
++        if (token == null) return
++        token = null
++        listeners.toList().forEach { it.ended() }
 +    }
 +
 +    private fun field(manager: NotificationManager, name: String): Any =
@@ -595,11 +618,19 @@ index 0000000..f0c6cb7
 +        // What the connector does on Play with no preparer set.
 +        override fun onPrepare(playWhenReady: Boolean) = player.prepare()
 +
++        // A prepare (playWhenReady false) must not start audio: JS holds the
++        // pick until the next Play (src/intents/car-picks.ts).
 +        override fun onPrepareFromMediaId(mediaId: String, playWhenReady: Boolean, extras: Bundle?) =
-+            emit(MusicEvents.BUTTON_PLAY_FROM_ID, Bundle().apply { putString("id", mediaId) })
++            emit(MusicEvents.BUTTON_PLAY_FROM_ID, Bundle().apply {
++                putString("id", mediaId)
++                putBoolean("playWhenReady", playWhenReady)
++            })
 +
 +        override fun onPrepareFromSearch(query: String, playWhenReady: Boolean, extras: Bundle?) =
-+            emit(MusicEvents.BUTTON_PLAY_FROM_SEARCH, Bundle().apply { putString("query", query) })
++            emit(MusicEvents.BUTTON_PLAY_FROM_SEARCH, Bundle().apply {
++                putString("query", query)
++                putBoolean("playWhenReady", playWhenReady)
++            })
 +
 +        override fun onPrepareFromUri(uri: Uri, playWhenReady: Boolean, extras: Bundle?) = Unit
 +
@@ -612,7 +643,7 @@ index 0000000..f0c6cb7
 +    }
 +}
 diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
-index afa6b0f..1f08217 100644
+index afa6b0f..dd8e0a0 100644
 --- a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
 +++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
 @@ -24,13 +24,16 @@ import com.doublesymmetry.trackplayer.extensions.find
@@ -734,6 +765,15 @@ index afa6b0f..1f08217 100644
              ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
              ?.emit(event, payload)
      }
+@@ -799,6 +845,8 @@ class MusicService : HeadlessJsTaskService() {
+     @MainThread
+     override fun onDestroy() {
+         super.onDestroy()
++        // The session goes with the player: a car must not keep its token. (patched)
++        MediaBrowserBridge.detach()
+         if (::player.isInitialized) {
+             player.destroy()
+         }
 diff --git a/node_modules/react-native-track-player/ios/RNTrackPlayer/Utils/Metadata.swift b/node_modules/react-native-track-player/ios/RNTrackPlayer/Utils/Metadata.swift
 index 70c094d..ece903f 100644
 --- a/node_modules/react-native-track-player/ios/RNTrackPlayer/Utils/Metadata.swift
