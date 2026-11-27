@@ -116,6 +116,15 @@ eas build  --profile production --platform ios
 eas submit --profile production --platform ios       # submit config already in eas.json
 ```
 
+The CarPlay app ships in every iOS profile: `eas.json` sets `SUBWAVE_CARPLAY=1`
+under each profile's `ios.env` (never for Android), since Apple granted team
+BU9RD766GN the CarPlay Audio entitlement on 2026-11-27. The flag drives
+`plugins/withCarPlay.js`, so this is a binary change, not an OTA one. To cut a
+build without CarPlay, drop it from that profile's `ios.env`. Signing needs
+"CarPlay Audio App (CarPlay framework)" on the `com.getsubwave.app` App ID; EAS
+regenerates the provisioning profile to include it. Details: [`TESTING.md`](./TESTING.md)
+"CarPlay".
+
 Optional metadata push (name/subtitle/description/keywords/review notes live in
 [`store.config.json`](../store.config.json), owner-editable):
 

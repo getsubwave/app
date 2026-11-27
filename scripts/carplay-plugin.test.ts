@@ -1,8 +1,8 @@
 // plugins/withCarPlay.js switches the CarPlay app on only when SUBWAVE_CARPLAY=1
-// is set at prebuild, because a device build cannot be signed with Apple's
-// CarPlay entitlement until the grant is on the App ID. Unset, the Info.plist
-// and entitlements must be what expo-build-properties alone writes: a stray
-// CarPlay role or entitlement fails every store build's signing.
+// is set at prebuild. eas.json sets it for every iOS build now that Apple has
+// granted the entitlement; unset, a build must still be exactly what
+// expo-build-properties alone writes, so a build can leave CarPlay out (a team
+// without the grant, or a CarPlay regression to ship around).
 //
 // The two plugins run here in app.json's order, with their Info.plist and
 // entitlements mods called directly on an empty plist, as prebuild calls them.
@@ -125,4 +125,19 @@ test('app.json lists the plugin before expo-build-properties', () => {
   const buildProperties = plugins.findIndex((p) => name(p) === 'expo-build-properties');
   assert.ok(carPlay >= 0, 'withCarPlay is not in app.json');
   assert.ok(carPlay < buildProperties, 'withCarPlay must come before expo-build-properties');
+});
+
+test('eas.json turns CarPlay on for every iOS build and never at the profile level', () => {
+  // Apple granted the entitlement (2026-11-27), so EAS builds carry it. It sits
+  // under each profile's ios.env, which a profile extending it inherits for iOS
+  // only: a profile-level env reaches Android builds too.
+  type Profile = { env?: Record<string, string>; ios?: { env?: Record<string, string> }; android?: { env?: Record<string, string> } };
+  const profiles: Record<string, Profile> = JSON.parse(readFileSync(path.join(ROOT, 'eas.json'), 'utf8')).build;
+  for (const name of ['development', 'development-device', 'preview', 'production']) {
+    assert.equal(profiles[name]?.ios?.env?.SUBWAVE_CARPLAY, '1', `${name} does not set SUBWAVE_CARPLAY=1 for iOS`);
+  }
+  for (const [name, profile] of Object.entries(profiles)) {
+    assert.equal(profile.env?.SUBWAVE_CARPLAY, undefined, `${name} sets SUBWAVE_CARPLAY for every platform`);
+    assert.equal(profile.android?.env?.SUBWAVE_CARPLAY, undefined, `${name} sets SUBWAVE_CARPLAY for Android`);
+  }
 });
