@@ -286,7 +286,10 @@ The pieces, all in a new binary (none of it reaches a phone over the air):
   the session a `PlaybackPreparer`: Auto's play-from-id and voice search become
   RNTP's `remote-play-id` and `remote-play-search` events, which 4.1.2 declares
   but never fires. `service.ts` answers them with `tuneIn` / `tuneInByName`
-  (`src/intents/tune.ts`), the tune-in Siri uses. Play on an idle player still
+  (`src/intents/tune.ts`), the tune-in Siri uses, so a pick goes through
+  `tune-flow.ts` like an App Intent's: with the player mounted it is handed to
+  it, and so to StreamRecovery, and a pick of another station switches through
+  it; only with none mounted does it load the stream itself. Play on an idle player still
   takes the connector's own path (`onPrepare` just prepares).
 - **The car can launch the app with no screen.** The session exists only once JS
   has set the player up, so the first connection starts React Native and runs the
@@ -322,7 +325,10 @@ the list shows each saved station with its host; a tap plays and opens Now
 Playing, with the DJ's title and artwork; play and pause work; adding a station on
 the phone updates the list; "play <station name>" by voice switches station. Then
 cold: force-stop the app, connect, pick a station (it must play), then open the
-phone app (it must show the same playback). Then the session restart: with the
+phone app (it must show the same playback). With the phone app open, pick
+another station in the car, then the playing one again: the playback log shows
+`intent station switch: handed to the player` and `intent tune-in: handed to
+the player`, never a direct load. Then the session restart: with the
 car connected, swipe the app away (or reload JS in a dev build), reconnect, and
 pick a station; it must play, not show a dead session. `adb shell dumpsys
 media_session` should list one SUB/WAVE session. Finally a **release build**
