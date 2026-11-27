@@ -36,6 +36,8 @@ export interface TimeContext {
 
 export interface ActiveShow {
   name?: string;
+  /** Same field as `ScheduleShow.description`. */
+  description?: string;
   /** `avatar` is the full public path; the controller serves a transparent
    *  1×1 placeholder when none is set. */
   persona?: { id?: string; name?: string; avatar?: string };
@@ -68,7 +70,11 @@ export interface SchedulePersona {
 export interface ScheduleShow {
   id: string;
   name: string;
+  /** The DJ's brief, written for the model. Listeners read `showBlurb`. */
   topic: string;
+  /** Listener-facing blurb, plain text up to 300 chars; '' when unset, absent
+   *  on an older controller (#2358). */
+  description?: string;
   /** Lead mood, derived server-side from moods[0] for back-compat. */
   mood: string;
   /** Full multi-value mood list (#929). */

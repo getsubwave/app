@@ -5,6 +5,14 @@ export function personaBlurbs(persona: SchedulePersona | null | undefined): stri
   return [persona.tagline, persona.soul].map((v) => (v || '').trim()).filter(Boolean);
 }
 
+export function showBlurb(
+  show: { description?: string | null; topic?: string | null } | null | undefined,
+): string {
+  const description = typeof show?.description === 'string' ? show.description.trim() : '';
+  if (description) return description;
+  return typeof show?.topic === 'string' ? show.topic.trim() : '';
+}
+
 export function onNowShow(
   activeShow: ActiveShow | null | undefined,
   slotShow: ScheduleShow | null | undefined,

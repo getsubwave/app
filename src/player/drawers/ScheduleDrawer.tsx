@@ -5,7 +5,7 @@ import ExpandableText from '@/components/ExpandableText';
 import { useAppActive } from '@/hooks/useAppActive';
 import type { StationApi } from '@/lib/api';
 import { normalizeStationLocale, type StationLocale } from '@/lib/format';
-import { onNowShow, personaBlurbs, personaById } from '@/lib/schedule';
+import { onNowShow, personaBlurbs, personaById, showBlurb } from '@/lib/schedule';
 import type {
   ActiveShow,
   ScheduleShow,
@@ -150,6 +150,10 @@ function OnNowCard({
   const hostName = host?.name || activeShow.persona?.name || '';
   const blurbs = personaBlurbs(host);
   const guestNames = (activeShow.guests || []).map((g) => g?.name).filter(Boolean);
+  const blurb = showBlurb({
+    description: show?.description?.trim() || activeShow.description,
+    topic: show?.topic,
+  });
   return (
     <View style={{ borderWidth: 1, borderColor: colors.accent, padding: 12, marginBottom: 16 }}>
       <Text className="font-mono text-accent" style={{ fontSize: 9, letterSpacing: 3, marginBottom: 4 }}>ON NOW</Text>
@@ -175,9 +179,9 @@ function OnNowCard({
         </View>
       ) : null}
       {open ? <PersonaPanel blurbs={blurbs} /> : null}
-      {show?.topic ? (
+      {blurb ? (
         <View style={{ marginTop: 8 }}>
-          <ExpandableText text={show.topic} lines={3} className="font-body text-muted" style={{ fontSize: 12, lineHeight: 18 }} />
+          <ExpandableText text={blurb} lines={3} className="font-body text-muted" style={{ fontSize: 12, lineHeight: 18 }} />
         </View>
       ) : null}
     </View>
@@ -188,6 +192,7 @@ function SlotRow({ slot, isNow, locale, api }: { slot: Slot; isNow: boolean; loc
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const blurbs = personaBlurbs(slot.persona);
+  const showText = showBlurb(slot.show);
   const avatar = slot.persona?.avatar ? api.avatar(slot.persona.avatar) : '';
   return (
     <View
@@ -227,9 +232,9 @@ function SlotRow({ slot, isNow, locale, api }: { slot: Slot; isNow: boolean; loc
           />
         ) : null}
         {open ? <PersonaPanel blurbs={blurbs} /> : null}
-        {slot.show?.topic ? (
+        {showText ? (
           <View style={{ marginTop: 4 }}>
-            <ExpandableText text={slot.show.topic} lines={2} className="font-body text-muted" style={{ fontSize: 11, lineHeight: 16 }} />
+            <ExpandableText text={showText} lines={2} className="font-body text-muted" style={{ fontSize: 11, lineHeight: 16 }} />
           </View>
         ) : null}
       </View>
