@@ -259,10 +259,10 @@ head unit) should show the new title without unlocking.
 
 ### CarPlay — Now-Playing in the car (iOS only)
 
-Every build today is **Tier 1**: control the *already-playing* stream from the dash (metadata,
-artwork, play/pause/stop). There is **no launchable in-car app icon** — start the
-stream in the phone app first, then connect the car. RNTP feeds the iOS surface
-(`MPNowPlayingInfoCenter`), so CarPlay needs **no extra app-side wiring**.
+**Tier 1**, in every build: control the *already-playing* stream from the dash (metadata,
+artwork, play/pause/stop). RNTP feeds the iOS surface (`MPNowPlayingInfoCenter`), so
+this needs **no extra app-side wiring**. A build without the CarPlay flag (below) has
+only this: no in-car app icon, so start the stream in the phone app first.
 
 - **iOS** — run on a device, or use the **CarPlay Simulator** (Simulator app →
   **I/O → External Displays → CarPlay**). Start the stream, open the CarPlay
@@ -270,14 +270,18 @@ stream in the phone app first, then connect the car. RNTP feeds the iOS surface
   Play/Pause work; no scrubber (the `isLiveStream` track hides it). On iOS 26+
   the Live Activity's `.small` card also appears on the CarPlay Dashboard.
 
-**Tier 2, the CarPlay app, is built but switched off.** It puts SUB/WAVE in the
+**Tier 2, the CarPlay app, is on in every EAS iOS build.** It puts SUB/WAVE in the
 car's app grid: the saved stations as a list, tap one to tune in, then the system
 Now Playing screen with a heart. It needs Apple's `com.apple.developer.carplay-audio`
 entitlement, which Apple grants on request (developer.apple.com/carplay), and a
-device build cannot be signed with it until the grant is on the App ID. So
-`plugins/withCarPlay.js` does nothing unless `SUBWAVE_CARPLAY=1` is set at prebuild:
-unset, the Info.plist and entitlements are what they were. Once the grant lands, set
-it in `eas.json`'s `env` for the iOS profiles.
+device build cannot be signed with it unless the grant is on the App ID. Apple
+granted it to team BU9RD766GN on 2026-11-27, and "CarPlay Audio App (CarPlay
+framework)" is on for `com.getsubwave.app`. `plugins/withCarPlay.js` still does
+nothing unless `SUBWAVE_CARPLAY=1` is set at prebuild, so a build can leave CarPlay
+out: unset, the Info.plist and entitlements are what they were without it.
+`eas.json` sets it in each profile's `ios.env`, never at profile level, where it
+would reach Android builds too (`npm test` checks). A plain local
+`npx expo prebuild -p ios` has no CarPlay; add the flag to get it.
 
 - **Swift draws, JS decides.** `targets/live-activity/_shared/SubwaveCarPlay.swift`
   reads the stations the app already mirrors for Siri (`SavedStations`, App Group),
@@ -318,8 +322,10 @@ it in `eas.json`'s `env` for the iOS profiles.
   second window (drag the app from the Dock) must close rather than open a player.
 - **Verified so far (2026-11):** it builds with Xcode 27, a normal phone launch
   goes through `SubwavePhoneSceneDelegate` (2026-10), and the plugin's plist edits
-  are under `npm test`. The CarPlay screens, the car-first launch and the iPad second
-  window are not yet run.
+  are under `npm test`. A signed Release device build (automatic signing,
+  `-allowProvisioningUpdates`) carries `com.apple.developer.carplay-audio` in its
+  profile and the app's entitlements (2026-11-27). The CarPlay screens, the
+  car-first launch and the iPad second window are not yet run.
 
 ### Android Auto — the station list in the car (Android only)
 

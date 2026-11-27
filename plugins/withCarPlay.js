@@ -4,10 +4,11 @@
 // plugin only switches it on:
 //
 //   1. `com.apple.developer.carplay-audio` in the entitlements. Apple grants
-//      it on request, and a DEVICE build cannot be signed with it until the
-//      grant is on the App ID, so it is opt-in: set SUBWAVE_CARPLAY=1 for a
-//      simulator build (the CarPlay simulator ignores provisioning) and, once
-//      the grant lands, in eas.json. Unset, the app is exactly as before.
+//      it on request, and a DEVICE build cannot be signed with it unless the
+//      grant is on the App ID. Team BU9RD766GN has it (2026-11-27), and
+//      eas.json sets SUBWAVE_CARPLAY=1 in every iOS profile's env. It stays a
+//      flag so a build can leave CarPlay out: unset, the app is exactly as
+//      it is without the plugin.
 //   2. A CarPlay scene role in the scene manifest that `ios.enableSceneSupport`
 //      writes, multiple scenes on, and the phone role's delegate swapped for
 //      PhoneSceneDelegate, which adopts React Native when the car launched the

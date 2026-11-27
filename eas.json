@@ -9,14 +9,16 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "image": "macos-tahoe-26.6-xcode-27.1"
+        "image": "macos-tahoe-26.6-xcode-27.1",
+        "env": { "SUBWAVE_CARPLAY": "1" }
       }
     },
     "development-device": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "image": "macos-tahoe-26.6-xcode-27.1"
+        "image": "macos-tahoe-26.6-xcode-27.1",
+        "env": { "SUBWAVE_CARPLAY": "1" }
       }
     },
     "preview": {
@@ -24,7 +26,8 @@
       "channel": "preview",
       "ios": {
         "simulator": false,
-        "image": "macos-tahoe-26.6-xcode-27.1"
+        "image": "macos-tahoe-26.6-xcode-27.1",
+        "env": { "SUBWAVE_CARPLAY": "1" }
       },
       "android": { "buildType": "apk" }
     },
@@ -32,7 +35,8 @@
       "autoIncrement": true,
       "channel": "production",
       "ios": {
-        "image": "macos-tahoe-26.6-xcode-27.1"
+        "image": "macos-tahoe-26.6-xcode-27.1",
+        "env": { "SUBWAVE_CARPLAY": "1" }
       }
     }
   },
