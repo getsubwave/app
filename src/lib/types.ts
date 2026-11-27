@@ -34,6 +34,13 @@ export interface TimeContext {
   vibe?: string;
 }
 
+/** GET /state's `streamIdleWindow`: the latest idle pause, as ages in ms when
+ *  the server answered. `endedMsAgo` is null while it lasts. */
+export interface IdleWindow {
+  startedMsAgo: number;
+  endedMsAgo: number | null;
+}
+
 export interface ActiveShow {
   name?: string;
   /** `avatar` is the full public path; the controller serves a transparent
@@ -229,10 +236,10 @@ export interface StationState {
   /** Whether the operator has the Lyrics panel on; GET /lyrics/current
    *  refuses while it is off. Absent on an older controller = off. */
   lyrics?: { enabled?: boolean };
-  /** The latest idle pause as ages in ms when the server answered (#2072),
-   *  the web player's idle-skip input. The ages change on every poll, so the
-   *  feed drops it (lib/feed-state.ts). */
-  streamIdleWindow?: { startedMsAgo: number; endedMsAgo: number | null } | null;
+  /** The idle-skip input (src/lib/idle-skip.ts), read fresh for each
+   *  connection. The ages change on every poll, so the feed drops it
+   *  (lib/feed-state.ts). */
+  streamIdleWindow?: IdleWindow | null;
 }
 
 /** One line of `GET /lyrics/current`. `startMs` is on the PLAYED timeline

@@ -202,6 +202,7 @@ export default function PlayerScreen() {
   const appActive = useAppActive();
 
   const [bgPoll, setBgPoll] = useState(false);
+  const [leadTrimMs, setLeadTrimMs] = useState(0);
   const {
     nowPlaying,
     context,
@@ -219,11 +220,14 @@ export default function PlayerScreen() {
     trackStartedAt,
     timezone,
     locale,
-  } = useStationFeed(api, { backgroundPoll: bgPoll });
+  } = useStationFeed(api, { backgroundPoll: bgPoll, leadTrimMs });
   const boothFeed = session.messages;
 
   const streamFormat = useStreamFormat(api?.base ?? null, streamInfo);
-  const localPlayer = usePlayer(api, 1, isConnected, streamFormat.format);
+  const localPlayer = usePlayer(api, 1, isConnected, streamFormat.format, {
+    bufferSeconds: streamInfo?.bufferSeconds,
+    onLeadTrim: setLeadTrimMs,
+  });
   useEffect(() => {
     setBgPoll(localPlayer.tunedIn);
   }, [localPlayer.tunedIn]);

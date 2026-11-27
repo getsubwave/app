@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import TrackPlayer, {
   Event,
   State,
@@ -10,8 +11,11 @@ import {
 } from '../../modules/airplay-route-picker';
 import { getLastLiveMeta, loadAndPlay, setupPlayer, teardown } from '@/audio/player';
 import type { StationApi } from '@/lib/api';
+import { SKIP_CUSHION_SECONDS } from '@/lib/idle-skip';
+import { IdleSkip } from '@/lib/idle-skip-playback';
 import { playbackEventLine, playbackLog } from '@/lib/playback-log';
 import { claimRemotePlay } from '@/lib/remote-play';
+import { MAX_LEAD_SECONDS } from '@/lib/sessionFeed';
 import { StreamRecovery } from '@/lib/stream-recovery';
 import type { StreamFormat } from '@/lib/streamFormat';
 import { loadVolumePref, saveVolumePref } from '@/lib/volume';
@@ -34,11 +38,19 @@ export interface Player {
   muted: boolean;
 }
 
+export interface IdleSkipOptions {
+  /** The station's advertised stream.bufferSeconds. */
+  bufferSeconds?: number | null;
+  /** Lag the idle skip shed from this connection, in ms; 0 on each new one. */
+  onLeadTrim?: (ms: number) => void;
+}
+
 export function usePlayer(
   api: StationApi | null,
   initialVolume = 1,
   isConnected: boolean | null = null,
   streamFormat: StreamFormat = 'mp3',
+  idle: IdleSkipOptions = {},
 ): Player {
   const [tunedIn, setTunedIn] = useState(false);
   const [status, setStatus] = useState<PlayerStatus>('idle');
@@ -54,6 +66,46 @@ export function usePlayer(
   useEffect(() => { formatRef.current = streamFormat; }, [streamFormat]);
   useEffect(() => { volumeRef.current = volume; }, [volume]);
 
+  const bufferSecondsRef = useRef(idle.bufferSeconds);
+  const onLeadTrimRef = useRef(idle.onLeadTrim);
+  useEffect(() => { bufferSecondsRef.current = idle.bufferSeconds; }, [idle.bufferSeconds]);
+  useEffect(() => { onLeadTrimRef.current = idle.onLeadTrim; }, [idle.onLeadTrim]);
+  const idleSkipRef = useRef<IdleSkip | null>(null);
+  const endIdleSkip = useCallback(() => {
+    idleSkipRef.current?.cancel();
+    idleSkipRef.current = null;
+    onLeadTrimRef.current?.(0);
+  }, []);
+  // MP3 only: its burst is CBR, so bufferSeconds sizes it. An older broadcast
+  // image's Opus burst is VBR and reaches back past the pause into music.
+  const startIdleSkip = useCallback((a: StationApi): IdleSkip | null => {
+    endIdleSkip();
+    const buffer = bufferSecondsRef.current;
+    if (formatRef.current !== 'mp3' || AppState.currentState !== 'active') return null;
+    if (typeof buffer !== 'number' || !(buffer > SKIP_CUSHION_SECONDS)) return null;
+    const skip = new IdleSkip({
+      bufferSeconds: Math.min(buffer, MAX_LEAD_SECONDS),
+      readState: (signal) => a.state(signal),
+      position: () => TrackPlayer.getProgress().then((p) => p.position),
+      setRate: (rate) => TrackPlayer.setRate(rate),
+      onTrim: (ms) => onLeadTrimRef.current?.(ms),
+      log: plog,
+    });
+    idleSkipRef.current = skip;
+    return skip;
+  }, [endIdleSkip]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') idleSkipRef.current?.background();
+    });
+    return () => {
+      sub.remove();
+      idleSkipRef.current?.cancel();
+      idleSkipRef.current = null;
+    };
+  }, []);
+
   const recoveryRef = useRef<StreamRecovery | null>(null);
   useEffect(() => {
     const recovery = new StreamRecovery({
@@ -62,7 +114,18 @@ export function usePlayer(
         const a = apiRef.current;
         if (!a) return;
         setStatus('connecting');
-        await loadAndPlay({ url: a.streamUrl(formatRef.current), headers: a.streamHeaders() });
+        const skip = startIdleSkip(a);
+        try {
+          await loadAndPlay({ url: a.streamUrl(formatRef.current), headers: a.streamHeaders() });
+        } catch (e) {
+          skip?.cancel();
+          throw e;
+        }
+        if (skip) {
+          skip.loaded();
+          // Its first Playing can land before load and play resolve.
+          TrackPlayer.getPlaybackState().then((p) => skip.onState(p.state)).catch(() => {});
+        }
         await TrackPlayer.setVolume(volumeRef.current);
       },
       onAdvancing: () => setStatus('playing'),
@@ -73,7 +136,7 @@ export function usePlayer(
       recovery.tuneOut();
       recoveryRef.current = null;
     };
-  }, []);
+  }, [startIdleSkip]);
 
   useEffect(() => claimRemotePlay(() => {
     const recovery = recoveryRef.current;
@@ -121,21 +184,25 @@ export function usePlayer(
       plog(playbackEventLine(event));
       if (event.type === Event.RemotePause || event.type === Event.RemoteStop) {
         recoveryRef.current?.tuneOut();
+        endIdleSkip();
         tunedInRef.current = false;
         setTunedIn(false);
         setStatus('idle');
         return;
       }
       if (event.type === Event.RemoteDuck) {
+        if (event.paused) idleSkipRef.current?.background();
         recoveryRef.current?.onDuck(event.paused, event.permanent);
         return;
       }
       if (event.type === Event.PlaybackError) {
+        idleSkipRef.current?.onState('error');
         if (tunedInRef.current) setStatus('connecting');
         recoveryRef.current?.onError();
         return;
       }
       const state = event.state;
+      idleSkipRef.current?.onState(state);
       if (state === State.Playing) {
         setStatus('playing');
         if (!tunedInRef.current && getLastLiveMeta()) {
@@ -163,6 +230,7 @@ export function usePlayer(
       plog(`route change reason=${e.reason} outputs=${e.outputs}`);
       if (e.reason !== ROUTE_REASON_OLD_DEVICE_UNAVAILABLE || !tunedInRef.current) return;
       recoveryRef.current?.tuneOut();
+      endIdleSkip();
       tunedInRef.current = false;
       setTunedIn(false);
       setStatus('idle');
@@ -170,7 +238,7 @@ export function usePlayer(
       TrackPlayer.stop().catch(() => {});
     });
     return () => sub?.remove();
-  }, []);
+  }, [endIdleSkip]);
 
   const prevConnectedRef = useRef(isConnected);
   useEffect(() => {
@@ -183,10 +251,11 @@ export function usePlayer(
 
   const stop = useCallback(() => {
     recoveryRef.current?.tuneOut();
+    endIdleSkip();
     setTunedIn(false);
     setStatus('idle');
     teardown().catch(() => {});
-  }, []);
+  }, [endIdleSkip]);
 
   const prevBaseRef = useRef(api?.base ?? null);
   useEffect(() => {
