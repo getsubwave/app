@@ -30,7 +30,7 @@ RNTP 4.1.2 is not natively New-Architecture-compatible — out of the box, Andro
 playback crashes with `You should not use ReactNativeHost directly in the New
 Architecture` from `MusicService`. **The fix is `patches/react-native-track-player+4.1.2.patch`**,
 whose New Architecture half is two source edits (the rest of the patch is the
-progress and iOS metadata fixes described below):
+progress, iOS metadata and Android Auto changes described below):
 
 - `MusicModule.kt` — routes async `@ReactMethod`s through a Unit-returning
   `launch` helper (TurboModule interop requires void-returning async methods).
@@ -52,6 +52,15 @@ consumer ProGuard rules. Recheck this adapter when upgrading either dependency.
 The iOS metadata patch clears omitted song-clock fields and preserves artwork
 on progress-only refreshes, while retaining `isLiveStream` and the LIVE controls.
 These changes require a new binary, not an OTA update.
+
+The patch also carries Android Auto's half of the player (see "Android Auto"
+below). `MediaBrowserBridge` reads the same two pinned KotlinAudio fields to
+give the session a `PlaybackPreparer` and hand its token to the browse service,
+and clears that token when `MusicService` is destroyed. `MusicModule.setupPlayer`
+skips RNTP's no-activity-in-front refusal while a media browser is bound, a
+background-setup bypass that only the car's callers can switch on
+(`CarCallers`), and turns a start Android still refuses into a rejection
+instead of a crash. Every Android session runs through both.
 
 For a device smoke test, play a track with a known duration and inspect
 `adb shell dumpsys media_session`: its duration should be the song's duration
@@ -253,14 +262,80 @@ stream in the phone app first, then connect the car. RNTP feeds the iOS surface
   Play/Pause work; no scrubber (the `isLiveStream` track hides it). On iOS 26+
   the Live Activity's `.small` card also appears on the CarPlay Dashboard.
 
-> **Android Auto is intentionally not declared.** The earlier
-> `plugins/withAndroidAuto.js` declaration (#444) was **rejected by Google Play**
-> (20 Jun 2026) under the Auto App Quality Guidelines: media apps that use a TTS
-> engine to read out content aren't permitted on Android Auto, which is exactly
-> what SUB/WAVE's AI DJ does. The declaration was removed so the Android build
-> stays Play-compliant. iOS CarPlay is unaffected (separate `MPNowPlayingInfoCenter`
-> path, no manifest declaration). Revisit only if Google's policy changes **and**
-> a compliant `MediaBrowserService` browse tree is added.
+### Android Auto — the station list in the car (Android only)
+
+SUB/WAVE lists in Android Auto as a media app: the saved stations, tap one to tune
+in, then Auto's own Now Playing screen with play and pause. "Hey Google, play
+Night Shift on SUB/WAVE" tunes in by name.
+
+> **Play history.** A manifest-only declaration (#444) was **enforced against by
+> Google Play** (20 Jun 2026): *media apps that use a TTS engine to read out
+> content aren't permitted*, which is what the AI DJ does, and #477 removed it.
+> This is a second attempt, now with a real browse tree. If Play enforces again,
+> remove `modules/android-auto` from the build rather than shipping around it.
+
+The pieces, all in a new binary (none of it reaches a phone over the air):
+
+- **`modules/android-auto`** declares the car app (`subwave_automotive_app_desc.xml`
+  and the `com.google.android.gms.car.application` meta-data, merged from the
+  module's manifest) and `SubwaveBrowseService`, a `MediaBrowserServiceCompat`.
+  It lists the stations JS mirrors into SharedPreferences (`setStations`, from
+  StationContext beside the Siri mirror), names and bases only.
+- **The browse session is the player's own.** The RNTP patch's
+  `MediaBrowserBridge` hands the service KotlinAudio's session token, and gives
+  the session a `PlaybackPreparer`: Auto's play-from-id and voice search become
+  RNTP's `remote-play-id` and `remote-play-search` events, which 4.1.2 declares
+  but never fires. `service.ts` answers them with `tuneIn` / `tuneInByName`
+  (`src/intents/tune.ts`), the tune-in Siri uses, so a pick goes through
+  `tune-flow.ts` like an App Intent's: with the player mounted it is handed to
+  it, and so to StreamRecovery, and a pick of another station switches through
+  it; only with none mounted does it load the stream itself. Play on an idle player still
+  takes the connector's own path (`onPrepare` just prepares).
+- **The car can launch the app with no screen.** The session exists only once JS
+  has set the player up, so the first connection starts React Native and runs the
+  `SubwaveCarConnect` headless task (`src/intents/car.ts`), which calls
+  `setupPlayer()` and nothing else: Auto forbids autoplay on launch. RNTP refuses
+  `setupPlayer` with no activity in front; the patch lets it through while a
+  media browser is bound (Android allows the foreground service then), and turns
+  a refused start into a rejection instead of a crash.
+- **System UI's resumption query is refused** (`EXTRA_RECENT` → no root): it
+  would otherwise start the app in the background on every boot.
+- **Only the car, the Assistant and the system get a root** (`CarCallers`,
+  after Google's media sample): this app, the system UID, a platform-signed
+  caller or one holding `MEDIA_CONTENT_CONTROL`, or Android Auto, Automotive's
+  media centre or the Google app when the package owns the calling UID and is a
+  system app or installed by Play. Any other app gets no root, so it can't read
+  the saved stations or start the player in the background.
+- **A session token is taken once.** `MediaBrowserServiceCompat` accepts one,
+  so the bridge clears its token when `MusicService` is destroyed, and a browse
+  service still holding the dead one answers no root until its clients unbind;
+  the car's next bind gets a fresh service that waits for the next session.
+- **A prepare doesn't play.** A pick with `playWhenReady` false (the
+  Assistant's prepare-then-play) is held in JS (`src/intents/car-picks.ts`) and
+  the next Play tunes in to it; pause or stop drops it. A refused or failed
+  pick is a line in the playback log.
+- **A spoken name that matches nothing plays the station listened to last**,
+  as Siri does: a generic word ("play radio") names no station.
+
+Testing needs the Android Auto app on a phone and Google's **Desktop Head Unit**
+(SDK Manager → SDK Tools → Android Auto Desktop Head Unit Emulator). In Android
+Auto's settings tap the version 10 times for developer mode, then ⋮ → **Start head
+unit server**; `adb forward tcp:5277 tcp:5277` and run `desktop-head-unit`. Check:
+the list shows each saved station with its host; a tap plays and opens Now
+Playing, with the DJ's title and artwork; play and pause work; adding a station on
+the phone updates the list; "play <station name>" by voice switches station. Then
+cold: force-stop the app, connect, pick a station (it must play), then open the
+phone app (it must show the same playback). With the phone app open, pick
+another station in the car, then the playing one again: the playback log shows
+`intent station switch: handed to the player` and `intent tune-in: handed to
+the player`, never a direct load. Then the session restart: with the
+car connected, swipe the app away (or reload JS in a dev build), reconnect, and
+pick a station; it must play, not show a dead session. `adb shell dumpsys
+media_session` should list one SUB/WAVE session. Finally a **release build**
+(`eas build --profile preview` or `./gradlew :app:assembleRelease`): the bridge
+reads KotlinAudio's fields by reflection, so only R8's output proves the keep
+rules still pin them, and the car's list, a pick and play/pause must all work
+there too.
 
 ### iPad — every orientation, Split View, Stage Manager
 
@@ -552,7 +627,8 @@ port types without device names, with `Other` for a word that isn't a known port
 ## Known issues / gotchas
 
 - **`patches/react-native-track-player+4.1.2.patch`** contains the RNTP new-arch
-  and media-session progress fixes (see "Architecture-critical facts"). It was previously bloated
+  and media-session progress fixes and Android Auto's `MediaBrowserBridge` (see
+  "Architecture-critical facts"). It was previously bloated
   to 229 files with accidental Gradle build artifacts; slimmed in 2026-06 and
   re-verified with a clean `BUILD SUCCESSFUL` before the progress fix was added.
   Keep it lean — never run `patch-package` after a Gradle build has populated

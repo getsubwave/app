@@ -1,5 +1,6 @@
 // Tune-ins and tune-outs from Siri, Shortcuts, Spotlight and the Control
-// (src/intents/tune-flow.ts): with the player mounted every load is handed to
+// (src/intents/tune-flow.ts), and Android Auto's picks, which tune in the same
+// way (src/intents/car-picks.ts): with the player mounted every load is handed to
 // it, so it goes through StreamRecovery; only with none mounted does the
 // intent load the stream itself. Also the mounted player's side of a station
 // switch (src/lib/remote-play.ts) and the bridge's deadline
@@ -16,7 +17,14 @@ import {
   within,
 } from '../src/intents/deadline.ts';
 import { NO_STATION_MESSAGE } from '../src/intents/station-messages.ts';
-import { NOT_SAVED_MESSAGE, tuneIn, tuneOut, type TuneDeps } from '../src/intents/tune-flow.ts';
+import { CAR_PICK_BUDGET_MS, createCarPicks } from '../src/intents/car-picks.ts';
+import {
+  NOT_SAVED_MESSAGE,
+  tuneIn,
+  tuneInByName,
+  tuneOut,
+  type TuneDeps,
+} from '../src/intents/tune-flow.ts';
 import {
   claimRemotePlay,
   playerMounted,
@@ -246,4 +254,77 @@ test('the answer is due a margin before the bridge stops waiting', () => {
 test('within gives the work’s answer, or TIMED_OUT once the wait ends first', async () => {
   assert.equal(await within(Promise.resolve('done'), new Promise(() => {})), 'done');
   assert.equal(await within(new Promise(() => {}), Promise.resolve()), TIMED_OUT);
+});
+
+test('a station asked for by name tunes in to it, through the mounted player', async () => {
+  const s = intents({ mounted: true, active: WAVE.url });
+  assert.deepEqual(await tuneInByName(s.deps, 'night shift', DEADLINE), { ok: true });
+  assert.deepEqual(s.calls, ['store Night Shift', `arm ${NIGHT.url}`, 'announce', 'disarm']);
+});
+
+test('a name that matches nothing, or a generic word, tunes in to the station listened to last', async () => {
+  for (const query of ['jazz fm', 'radio']) {
+    const s = intents({ mounted: true });
+    assert.deepEqual(await tuneInByName(s.deps, query, DEADLINE), { ok: true });
+    assert.deepEqual(s.calls, ['player tunes in'], query);
+  }
+});
+
+test('with no player mounted, a station asked for by name is loaded directly', async () => {
+  const s = intents();
+  await tuneInByName(s.deps, 'Night Shift', DEADLINE);
+  assert.deepEqual(s.calls, [`direct load ${NIGHT.url}`]);
+});
+
+// Android Auto: a pick, a voice search and a prepared pick's Play, wired as
+// service.ts wires them, never load past the mounted player.
+function carPicks(s: ReturnType<typeof intents>, now: number) {
+  const logged: string[] = [];
+  const car = createCarPicks(
+    (line) => logged.push(line),
+    () => now,
+  );
+  const byId = (id: string) => ({
+    label: `pick ${id}`,
+    tune: (deadline: number) => tuneIn(s.deps, id, deadline),
+  });
+  const byName = (query: string) => ({
+    label: `search "${query}"`,
+    tune: (deadline: number) => tuneInByName(s.deps, query, deadline),
+  });
+  return { car, byId, byName, logged };
+}
+
+test('car picks go through the mounted player: by id, by voice, and a prepared Play', async () => {
+  const now = DEADLINE - CAR_PICK_BUDGET_MS;
+
+  const id = intents({ mounted: true });
+  await carPicks(id, now).car.pick(carPicks(id, now).byId(WAVE.url), true);
+  assert.deepEqual(id.calls, ['store SUB/WAVE', `arm ${WAVE.url}`, 'announce', 'disarm']);
+
+  const voice = intents({ mounted: true });
+  const v = carPicks(voice, now);
+  await v.car.pick(v.byName('night shift'), true);
+  assert.deepEqual(voice.calls, ['player tunes in']);
+
+  const prepared = intents({ mounted: true });
+  const p = carPicks(prepared, now);
+  await p.car.pick(p.byId(WAVE.url), false);
+  assert.deepEqual(prepared.calls, [], 'a prepare loads nothing');
+  assert.equal(p.car.playPrepared(), true);
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.deepEqual(prepared.calls, ['store SUB/WAVE', `arm ${WAVE.url}`, 'announce', 'disarm']);
+  assert.deepEqual(
+    [...id.calls, ...voice.calls, ...prepared.calls].filter((c) => c.startsWith('direct')),
+    [],
+  );
+});
+
+test('a car pick its station refuses is logged with the reason', async () => {
+  const s = intents({ mounted: true });
+  const c = carPicks(s, DEADLINE - CAR_PICK_BUDGET_MS);
+  await c.car.pick(c.byId('https://unknown.example.com'), true);
+  assert.deepEqual(c.logged, [
+    `car pick https://unknown.example.com refused: ${NOT_SAVED_MESSAGE}`,
+  ]);
 });
