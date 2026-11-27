@@ -3,8 +3,8 @@
 // the previous track for the stream buffer's length after a change
 // (heardTrack, the rule useStationFeed promotes tracks by).
 
-import TrackPlayer, { State } from 'react-native-track-player';
 import type { IntentReply } from '../../modules/app-intents';
+import { isOnAir, playbackStateNow } from '@/audio/player';
 import { heardTrack, leadMsFrom } from '@/lib/heard-track';
 import { announceLike } from '@/lib/like-events';
 import type { StationApi } from '@/lib/api';
@@ -17,18 +17,13 @@ import {
 } from './on-air-reply';
 import type { IntentStation } from './station';
 
-async function playingHere(): Promise<boolean> {
-  const { state } = await TrackPlayer.getPlaybackState().catch(() => ({ state: State.None }));
-  return state === State.Playing || state === State.Buffering;
-}
-
 async function snapshot(api: StationApi): Promise<OnAirSnapshot> {
   const [npRes, stateRes] = await Promise.allSettled([api.nowPlaying(), api.state()]);
   if (npRes.status !== 'fulfilled') return { reachable: false, online: false, track: null };
   const np = npRes.value;
   const live: OnAirTrack | null = np.nowPlaying;
   const online = np.streamOnline !== false;
-  if (!(await playingHere()) || stateRes.status !== 'fulfilled') {
+  if (!isOnAir(await playbackStateNow()) || stateRes.status !== 'fulfilled') {
     return { reachable: true, online, track: live };
   }
   // The same pairing useStationFeed makes: /state's live-edge stamp only

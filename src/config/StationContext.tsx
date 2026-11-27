@@ -16,8 +16,8 @@ import {
   featuredStation,
   loadStationCredentials,
   loadStationPassword,
-  loadStations,
   onStationStoreChanged,
+  readActiveStationState,
   removeRecent,
   saveStationCredentials,
   saveStationPassword,
@@ -54,33 +54,6 @@ interface StationContextValue {
 
 const Ctx = createContext<StationContextValue | null>(null);
 
-/** The stored store plus the active station's login and password, as the
- *  screens need them. A keychain failure leaves either null rather than
- *  failing the read. */
-async function readStationState(): Promise<{
-  store: StationStore;
-  credentials: StationCredentials | null;
-  password: string | null;
-}> {
-  const s = await loadStations();
-  let activeCredentials: StationCredentials | null = null;
-  let activePassword: string | null = null;
-  try {
-    activeCredentials = s.activeStation
-      ? await loadStationCredentials(s.activeStation)
-      : null;
-  } catch {
-    // Boot without credentials if the keychain fails; later actions report failure
-    // and leave the vault intact.
-  }
-  try {
-    activePassword = s.activeStation ? await loadStationPassword(s.activeStation) : null;
-  } catch {
-    // Same: a locked station then asks again rather than failing to boot.
-  }
-  return { store: s, credentials: activeCredentials, password: activePassword };
-}
-
 export function StationProvider({ children }: { children: React.ReactNode }) {
   const [store, setStore] = useState<StationStore>({ activeStation: null, recents: [] });
   const [credentials, setCredentials] = useState<StationCredentials | null>(null);
@@ -95,7 +68,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    readStationState().then((s) => {
+    readActiveStationState().then((s) => {
       if (alive) {
         setStore(s.store);
         setCredentials(s.credentials);
@@ -116,7 +89,7 @@ export function StationProvider({ children }: { children: React.ReactNode }) {
   useEffect(
     () =>
       onStationStoreChanged(() => {
-        readStationState()
+        readActiveStationState()
           .then((s) => {
             setCredentials(s.credentials);
             setStationPassword(s.password);

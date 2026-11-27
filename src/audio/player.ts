@@ -4,7 +4,9 @@ import TrackPlayer, {
   Capability,
   type PlayerOptions,
   RatingType,
+  State,
 } from 'react-native-track-player';
+import { createAnnouncer } from '@/lib/announcer';
 import { playbackLog } from '@/lib/playback-log';
 
 const STREAM_TRACK_ID = 'subwave-live';
@@ -93,26 +95,33 @@ export async function loadAndPlay(meta: LiveTrackMeta): Promise<void> {
 // RNTP remote event: an App Intent (src/intents/tune.ts). usePlayer must hear
 // it before the Stopped event lands, or it reads Stopped as a dead stream and
 // reconnects, the same trap RemotePause is handled for.
-const tuneOutListeners = new Set<() => void>();
+const externalTuneOuts = createAnnouncer();
 
-export function onExternalTuneOut(fn: () => void): () => void {
-  tuneOutListeners.add(fn);
-  return () => {
-    tuneOutListeners.delete(fn);
-  };
-}
+export const onExternalTuneOut = externalTuneOuts.subscribe;
 
 /** stop(), not teardown(): the Icecast connection drops, and lastLiveMeta
  *  survives so the next tune-in resumes at the live edge. */
 export async function externalTuneOut(): Promise<void> {
-  tuneOutListeners.forEach((fn) => {
-    try {
-      fn();
-    } catch {
-      /* a broken subscriber must not keep the stream running */
-    }
-  });
+  externalTuneOuts.announce();
   await TrackPlayer.stop();
+}
+
+/** The native states that mean a stream is on its way to the listener or
+ *  reaching them: what an App Intent's tune-in leaves alone, what usePlayer
+ *  adopts at mount, and when "what's playing" measures from the buffer. */
+const ON_AIR_STATES: ReadonlySet<State> = new Set([State.Playing, State.Buffering, State.Loading]);
+
+export function isOnAir(state: State | null | undefined): boolean {
+  return state != null && ON_AIR_STATES.has(state);
+}
+
+/** The native state, or None when the player isn't set up yet. */
+export async function playbackStateNow(): Promise<State> {
+  try {
+    return (await TrackPlayer.getPlaybackState()).state;
+  } catch {
+    return State.None;
+  }
 }
 
 export async function teardown(): Promise<void> {

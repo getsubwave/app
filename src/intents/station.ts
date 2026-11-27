@@ -3,7 +3,7 @@
 // before any screen has mounted, so it cannot borrow the context's client.
 
 import { createApi, type StationApi } from '@/lib/api';
-import { loadStationCredentials, loadStationPassword, loadStations } from '@/lib/station';
+import { readActiveStationState } from '@/lib/station';
 
 export interface IntentStation {
   base: string;
@@ -15,11 +15,9 @@ export interface IntentStation {
 export const NO_STATION_MESSAGE = 'Open SUB/WAVE and pick a station first.';
 
 export async function activeStation(): Promise<IntentStation | null> {
-  const store = await loadStations();
+  const { store, credentials, password } = await readActiveStationState();
   const base = store.activeStation;
   if (!base) return null;
-  const credentials = await loadStationCredentials(base).catch(() => null);
-  const password = await loadStationPassword(base).catch(() => null);
   return {
     base,
     name: store.recents.find((r) => r.url === base)?.name ?? null,

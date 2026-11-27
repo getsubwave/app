@@ -12,8 +12,10 @@ import {
 import { setOnAir } from '../../modules/app-intents';
 import {
   getLastLiveMeta,
+  isOnAir,
   loadAndPlay,
   onExternalTuneOut,
+  playbackStateNow,
   setupPlayer,
   teardown,
 } from '@/audio/player';
@@ -115,6 +117,17 @@ export function usePlayer(
   }, []);
 
   const recoveryRef = useRef<StreamRecovery | null>(null);
+  // Every tune-out the listener makes away from the Stop button: a lock-screen
+  // pause, an App Intent, a vanished route. The ref flips synchronously, ahead
+  // of the Stopped event, which would otherwise read as a dead stream.
+  const tunedOut = useCallback(() => {
+    recoveryRef.current?.tuneOut();
+    endIdleSkip();
+    tunedInRef.current = false;
+    setTunedIn(false);
+    setStatus('idle');
+  }, [endIdleSkip]);
+
   useEffect(() => {
     const recovery = new StreamRecovery({
       position: () => TrackPlayer.getProgress().then((p) => p.position),
@@ -191,11 +204,7 @@ export function usePlayer(
     (event) => {
       plog(playbackEventLine(event));
       if (event.type === Event.RemotePause || event.type === Event.RemoteStop) {
-        recoveryRef.current?.tuneOut();
-        endIdleSkip();
-        tunedInRef.current = false;
-        setTunedIn(false);
-        setStatus('idle');
+        tunedOut();
         return;
       }
       if (event.type === Event.RemoteDuck) {
@@ -233,18 +242,13 @@ export function usePlayer(
   // adopt it has already fired.
   useEffect(() => {
     let alive = true;
-    TrackPlayer.getPlaybackState()
-      .then(({ state }) => {
-        if (!alive || tunedInRef.current || !getLastLiveMeta()) return;
-        if (state !== State.Playing && state !== State.Buffering && state !== State.Loading) {
-          return;
-        }
-        tunedInRef.current = true;
-        setTunedIn(true);
-        setStatus(state === State.Playing ? 'playing' : 'connecting');
-        recoveryRef.current?.adopt();
-      })
-      .catch(() => {});
+    void playbackStateNow().then((state) => {
+      if (!alive || tunedInRef.current || !getLastLiveMeta() || !isOnAir(state)) return;
+      tunedInRef.current = true;
+      setTunedIn(true);
+      setStatus(state === State.Playing ? 'playing' : 'connecting');
+      recoveryRef.current?.adopt();
+    });
     return () => {
       alive = false;
     };
@@ -257,19 +261,8 @@ export function usePlayer(
     setOnAir(tunedIn);
   }, [tunedIn]);
 
-  // An App Intent tune-out (src/intents/tune.ts): the same synchronous ref
-  // flip as the RemotePause handler above, ahead of the Stopped event.
-  useEffect(
-    () =>
-      onExternalTuneOut(() => {
-        recoveryRef.current?.tuneOut();
-        endIdleSkip();
-        tunedInRef.current = false;
-        setTunedIn(false);
-        setStatus('idle');
-      }),
-    [endIdleSkip],
-  );
+  // An App Intent tune-out (src/intents/tune.ts), handled like RemotePause.
+  useEffect(() => onExternalTuneOut(tunedOut), [tunedOut]);
 
   // iOS: an oldDeviceUnavailable route change (Bluetooth speaker off, CarPlay
   // disconnected, headphones unplugged) is a tune-out (#992) — the
@@ -281,16 +274,12 @@ export function usePlayer(
     const sub = addAudioRouteChangeListener((e) => {
       plog(`route change reason=${e.reason} outputs=${e.outputs}`);
       if (e.reason !== ROUTE_REASON_OLD_DEVICE_UNAVAILABLE || !tunedInRef.current) return;
-      recoveryRef.current?.tuneOut();
-      endIdleSkip();
-      tunedInRef.current = false;
-      setTunedIn(false);
-      setStatus('idle');
+      tunedOut();
       // stop(), not pause: unloads the item so the Icecast connection drops.
       TrackPlayer.stop().catch(() => {});
     });
     return () => sub?.remove();
-  }, [endIdleSkip]);
+  }, [tunedOut]);
 
   const prevConnectedRef = useRef(isConnected);
   useEffect(() => {
