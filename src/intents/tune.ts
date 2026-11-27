@@ -1,21 +1,35 @@
 // Tune in and out on behalf of an App Intent (Siri, Shortcuts, Spotlight, a
-// Control), including to another saved station.
+// Control), including to another saved station. The decisions are in
+// tune-flow.ts; this wires them to the player, the store and the bridge.
 // Module-level, not a hook: an intent can launch the app straight into the
 // background, where this runs before any screen has mounted, or with none
 // mounting at all. usePlayer adopts the audio when it does mount.
 
 import TrackPlayer, { Event, State } from 'react-native-track-player';
-import type { IntentReply } from '../../modules/app-intents';
+import { setOnAir, type IntentReply } from '../../modules/app-intents';
 import { isLiveActivitySupported, onLiveActivityStart } from '../../modules/live-activity';
-import { externalTuneOut, getLastLiveMeta, loadAndPlay, teardown } from '@/audio/player';
+import {
+  externalTuneOut,
+  getLastLiveMeta,
+  isOnAir,
+  loadAndPlay,
+  playbackStateNow,
+  teardown,
+} from '@/audio/player';
+import { playbackLog } from '@/lib/playback-log';
+import {
+  playerMounted,
+  playOnMountedPlayer,
+  tuneInOnArrival,
+} from '@/lib/remote-play';
 import { announceStationStoreChanged, loadStations, setActiveStation } from '@/lib/station';
-import { splitStationAddress, type StoredStationRef } from '@/lib/station-credentials';
-import { findSavedStation } from '@/lib/station-store';
-import { activeStation, NO_STATION_MESSAGE } from './station';
+import { timeLeft } from './deadline';
+import { activeStation } from './station';
+import * as flow from './tune-flow';
 
-// How long a tune-in waits for audio before answering. Long enough that a
-// refused or unreachable stream is reported to Siri rather than silently
-// failing; short enough to stay inside the bridge's reply window.
+// How long a tune-in waits for audio before answering, at most. Long enough
+// that a refused or unreachable stream is reported to Siri rather than
+// silently failing; cut shorter when the bridge's deadline is nearer.
 const START_WAIT_MS = 8000;
 
 // How long a tune-in holds its answer, once audio is playing, for
@@ -25,140 +39,118 @@ const START_WAIT_MS = 8000;
 // the next time the app is opened.
 const CARD_WAIT_MS = 2000;
 
-const ON_AIR = new Set<State>([State.Playing, State.Buffering, State.Loading]);
+const deps: flow.TuneDeps = {
+  loadStore: loadStations,
+  setActiveStation: async (ref) => {
+    await setActiveStation({ url: ref.url, name: ref.name });
+  },
+  announceSwitch: announceStationStoreChanged,
+  onAir: async () => isOnAir(await playbackStateNow()),
+  playerMounted,
+  playOnMountedPlayer,
+  tuneInOnArrival,
+  hasStream: () => getLastLiveMeta() !== null,
+  reloadLast: async () => {
+    const meta = getLastLiveMeta();
+    if (meta) await loadAndPlay(meta);
+  },
+  teardown,
+  activeStation: async () => {
+    const station = await activeStation();
+    if (!station) return null;
+    const { api } = station;
+    return {
+      name: station.name,
+      load: () => loadAndPlay({ url: api.streamUrl('mp3'), headers: api.streamHeaders() }),
+    };
+  },
+  startAndWait,
+  tuneOut: externalTuneOut,
+  setOnAir,
+  log: (line) => playbackLog.add(line),
+};
 
-const NOT_SAVED_MESSAGE = "That station isn't saved in SUB/WAVE. Add it in the app first.";
-
-/** Tune in to `stationId` (a saved station's base, as Siri and Spotlight know
- *  it), or to the station listened to last when there is none. */
-export async function tuneIn(stationId?: string): Promise<IntentReply> {
-  if (stationId) {
-    const store = await loadStations();
-    const wanted = findSavedStation(store.recents, stationId);
-    if (!wanted) return { ok: false, message: NOT_SAVED_MESSAGE };
-    const active = store.activeStation ? splitStationAddress(store.activeStation).base : null;
-    if (splitStationAddress(wanted.url).base !== active) return switchTo(wanted);
-  }
-
-  const { state } = await TrackPlayer.getPlaybackState().catch(() => ({ state: State.None }));
-  if (ON_AIR.has(state)) return { ok: true };
-
-  // Warm: the same reload a lock-screen Play does (service.ts).
-  const meta = getLastLiveMeta();
-  if (meta) return startAndWait(() => loadAndPlay(meta), null);
-
-  // Cold, or after an in-app stop: rebuild the stream from the stored
-  // station, as StationContext does at boot. Always the MP3 mount: a stored
-  // format preference is only honoured once the station's feed confirms the
-  // mount, and usePlayer retunes onto it when the feed loads.
-  const station = await activeStation();
-  if (!station) return { ok: false, message: NO_STATION_MESSAGE };
-  const { api } = station;
-  return startAndWait(
-    () => loadAndPlay({ url: api.streamUrl('mp3'), headers: api.streamHeaders() }),
-    station.name,
-  );
+export function tuneIn(stationId: string | undefined, deadline: number): Promise<IntentReply> {
+  return flow.tuneIn(deps, stationId, deadline);
 }
 
-/** Another saved station. The store is written and the old stream stopped
- *  first, and StationContext is told only once the new stream is loaded: by
- *  the time the screens' base changes, the stream playing belongs to it, so
- *  usePlayer keeps it instead of stopping a stale one. */
-async function switchTo(ref: StoredStationRef): Promise<IntentReply> {
-  await setActiveStation({ url: ref.url, name: ref.name });
-  await teardown();
-  const station = await activeStation();
-  if (!station) return { ok: false, message: NO_STATION_MESSAGE };
-  const { api } = station;
-  return startAndWait(async () => {
-    try {
-      await loadAndPlay({ url: api.streamUrl('mp3'), headers: api.streamHeaders() });
-    } finally {
-      // The station switched even if its stream did not start.
-      announceStationStoreChanged();
-    }
-  }, station.name);
+export function tuneOut(): Promise<IntentReply> {
+  return flow.tuneOut(deps);
 }
 
-export async function tuneOut(): Promise<IntentReply> {
-  await externalTuneOut().catch(() => {});
-  return { ok: true };
-}
-
-async function startAndWait(
-  start: () => Promise<void>,
-  stationName: string | null,
-): Promise<IntentReply> {
+async function startAndWait(start: () => Promise<void>, deadline: number): Promise<boolean> {
+  // The card's wait comes out of the budget first; the rest is for audio.
+  const startWait = Math.min(START_WAIT_MS, timeLeft(deadline, Date.now()) - CARD_WAIT_MS);
   // Listen before starting so a fast Playing, or a fast card, is not missed.
-  const outcome = untilPlaying();
+  const outcome = untilPlaying(Math.max(0, startWait));
   const card = untilCardStarts();
   try {
     await start();
   } catch {
     outcome.cancel();
     card.cancel();
-    return failed(stationName);
+    return false;
   }
   if (!(await outcome.result)) {
     card.cancel();
-    return failed(stationName);
+    return false;
   }
-  await card.result;
-  return { ok: true };
+  await Promise.race([card.result, wait(timeLeft(deadline, Date.now()))]);
+  card.cancel();
+  return true;
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Settles once: on `done(value)`, or with `onTimeout` at the cap. `listen`
+ *  subscribes and returns the unsubscribe, run on settling. */
+function settleOnce<T>(
+  timeoutMs: number,
+  onTimeout: T,
+  listen: (done: (value: T) => void) => () => void,
+): { result: Promise<T>; cancel: (value: T) => void } {
+  let settle: (value: T) => void = () => {};
+  const result = new Promise<T>((resolve) => {
+    settle = resolve;
+  });
+  let finished = false;
+  let unsubscribe: () => void = () => {};
+  const done = (value: T) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timer);
+    unsubscribe();
+    settle(value);
+  };
+  const timer = setTimeout(() => done(onTimeout), timeoutMs);
+  unsubscribe = listen(done);
+  if (finished) unsubscribe();
+  return { result, cancel: done };
 }
 
 /** Settles on the next Live Activity start attempt, whatever its outcome,
  *  or at the cap. Immediately where there is no card to wait for. */
 function untilCardStarts(): { result: Promise<void>; cancel: () => void } {
   if (!isLiveActivitySupported()) return { result: Promise.resolve(), cancel: () => {} };
-  let settle: () => void = () => {};
-  const result = new Promise<void>((resolve) => {
-    settle = resolve;
-  });
-  const unsubscribe = onLiveActivityStart(() => done());
-  const timer = setTimeout(done, CARD_WAIT_MS);
-  let finished = false;
-  function done() {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    unsubscribe();
-    settle();
-  }
-  return { result, cancel: done };
-}
-
-function failed(stationName: string | null): IntentReply {
-  const station = stationName ?? 'the station';
-  return {
-    ok: false,
-    message: `Couldn't reach ${station}. If it's private, open SUB/WAVE to unlock it.`,
-  };
+  const s = settleOnce<void>(CARD_WAIT_MS, undefined, (done) => onLiveActivityStart(() => done()));
+  return { result: s.result, cancel: () => s.cancel() };
 }
 
 /** True on Playing; false on an error. Still buffering when the wait runs out
  *  counts as started: the player keeps trying, and usePlayer's watchdog takes
  *  over once a screen mounts. */
-function untilPlaying(): { result: Promise<boolean>; cancel: () => void } {
-  let settle: (ok: boolean) => void = () => {};
-  const result = new Promise<boolean>((resolve) => {
-    settle = resolve;
+function untilPlaying(timeoutMs: number): { result: Promise<boolean>; cancel: () => void } {
+  const s = settleOnce<boolean>(timeoutMs, true, (done) => {
+    const subs = [
+      TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
+        if (state === State.Playing) done(true);
+        else if (state === State.Error) done(false);
+      }),
+      TrackPlayer.addEventListener(Event.PlaybackError, () => done(false)),
+    ];
+    return () => subs.forEach((sub) => sub.remove());
   });
-  const subs = [
-    TrackPlayer.addEventListener(Event.PlaybackState, ({ state }) => {
-      if (state === State.Playing) done(true);
-      else if (state === State.Error) done(false);
-    }),
-    TrackPlayer.addEventListener(Event.PlaybackError, () => done(false)),
-  ];
-  const timer = setTimeout(() => done(true), START_WAIT_MS);
-  let finished = false;
-  function done(ok: boolean) {
-    if (finished) return;
-    finished = true;
-    clearTimeout(timer);
-    subs.forEach((s) => s.remove());
-    settle(ok);
-  }
-  return { result, cancel: () => done(false) };
+  return { result: s.result, cancel: () => s.cancel(false) };
 }

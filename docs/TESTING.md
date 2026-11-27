@@ -371,10 +371,13 @@ read the station store, so `StationContext` mirrors names and credential-free
 bases into the App Group (`setStations`), and the module then calls the
 app-target `SubwaveStationIndex.reindex` by class name to refresh Spotlight and
 the Siri phrases. A switch away from the active station is JS
-(`src/intents/tune.ts`): it writes the store, stops the old stream, starts the
-new one, and only then tells `StationContext`, so `usePlayer` finds the
-playing stream already belongs to the new base (`streamBelongsTo`) and keeps
-it. On iOS 27, `AudioSchemaIntents.swift` exposes the same stations to Siri's
+(`src/intents/tune-flow.ts`). With the player mounted it writes the store, arms
+a tune-in for the new base (`tuneInOnArrival`, `src/lib/remote-play.ts`) and
+tells `StationContext`; `usePlayer`, seeing its base change, takes it and tunes
+in through `StreamRecovery` in place of the stop a switch makes. With none
+mounted it stops the old stream, starts the new one, and only then tells
+`StationContext`, so a player mounting mid-switch finds the playing stream
+already belongs to the new base (`streamBelongsTo`) and keeps it. On iOS 27, `AudioSchemaIntents.swift` exposes the same stations to Siri's
 audio search.
 
 The intents are thin. Each hands its action to JS and waits for the answer:
@@ -408,19 +411,31 @@ What is easy to get wrong:
   when a scene connects. iOS connects one for an intent launch even though the
   app is never shown, so JS boots (checked on iOS 18.5 and 27). If an intent
   ever times out cold, look there first.
+- **An intent loads only when no player is mounted.** With one mounted, every
+  tune-in is handed to it over `service.ts`'s own claim (`playOnMountedPlayer`),
+  so it goes through `stream-recovery.ts` like any listener's load: one at a
+  time, with the idle skip, never beside a backoff's reload (CLAUDE.md).
+  `scripts/intent-tune.test.ts` holds the routing.
 - **`usePlayer` must adopt audio it did not start.** A cold tune-in can reach
   Playing before any screen mounts, so the hook reads the player's state on
   mount. A tune-out goes through `externalTuneOut()`, or the hook reads the
   Stopped event as a dead stream and reconnects.
+- **Every answer must beat the bridge's 20 s window**, or Siri says the app
+  didn't respond for work that went through, and the listener asks again.
+  The bridge sends its deadline with each request and JS cuts every wait to it
+  (`src/intents/deadline.ts`): the tune-in's wait for audio and the card, the
+  song request's POST and polling.
 - **ActivityKit refuses a background app.** `liveactivitiesd` logs "Requester
   is not foreground" and the card never appears, though the audio plays.
   Inside a `LiveActivityIntent`'s run the request is allowed, which is why
-  `TuneInIntent` is one and `tune.ts` holds its answer (up to 2 s) until the
+  `TuneInIntent` is one and `tune.ts` holds its answer (up to 2 s, inside the
+  deadline) until the
   card has been asked for. `useLiveActivity` also retries when the app comes
   forward, for a tune-in that missed the window.
 - **The control cannot ask the player.** It reads an on-air flag in the App
   Group that `usePlayer` writes through `setOnAir`, which also reloads the
-  control. An app killed mid-song leaves the flag on until the next tap or
+  control; an intent's tune-in and tune-out write it too, for when no player
+  is mounted. An app killed mid-song leaves the flag on until the next tap or
   launch. The flag key and the control kind are matched by string between
   `TuneControl.swift` and the app-intents module.
 - **A control never resolves parameters.** `ToggleTuneIntent` is built with

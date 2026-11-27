@@ -12,7 +12,7 @@ export interface IntentStation {
   api: StationApi;
 }
 
-export const NO_STATION_MESSAGE = 'Open SUB/WAVE and pick a station first.';
+export { NO_STATION_MESSAGE } from './station-messages';
 
 export async function activeStation(): Promise<IntentStation | null> {
   const { store, credentials, password } = await readActiveStationState();

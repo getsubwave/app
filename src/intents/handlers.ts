@@ -4,16 +4,18 @@
 // screen mounts.
 
 import { setIntentHandler } from '../../modules/app-intents';
+import { intentDeadline } from './deadline';
 import { likeHeardTrack, whatsPlaying } from './on-air';
 import { askForSong } from './request-reply';
 import { activeStation, NO_STATION_MESSAGE } from './station';
 import { tuneIn, tuneOut } from './tune';
 
 export function registerIntentHandlers(): void {
-  setIntentHandler(async (action, args) => {
+  setIntentHandler(async (action, args, sentDeadline) => {
+    const deadline = intentDeadline(sentDeadline, Date.now());
     switch (action) {
       case 'tuneIn':
-        return tuneIn(args.station);
+        return tuneIn(args.station, deadline);
       case 'tuneOut':
         return tuneOut();
       case 'request':

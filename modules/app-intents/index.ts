@@ -12,15 +12,25 @@ export interface IntentReply {
   message?: string;
 }
 
+/** What a Swift intent asks for (SubwaveIntentAction in
+ *  targets/live-activity/_shared/SubwaveIntentBridge.swift). A string, since an
+ *  OTA update can meet a binary with actions it doesn't know yet. */
+export type IntentAction = 'tuneIn' | 'tuneOut' | 'request' | 'nowPlaying' | 'like' | (string & {});
+
 export type IntentHandler = (
-  action: string,
+  action: IntentAction,
   args: Record<string, string>,
+  /** Epoch ms at which the Swift bridge stops waiting; absent from a binary
+   *  that sends none (src/intents/deadline.ts). */
+  deadline: number | undefined,
 ) => Promise<IntentReply>;
 
 interface IntentRequest {
   token: string;
   action: string;
   args?: Record<string, string>;
+  /** Epoch ms at which the Swift bridge stops waiting. */
+  deadline?: number;
 }
 
 interface Subscription {
@@ -79,8 +89,8 @@ export function setIntentHandler(handler: IntentHandler): Subscription | null {
   if (!native) return null;
   const bridge = native;
   try {
-    return bridge.addListener('onIntent', ({ token, action, args }) => {
-      void handler(action, args ?? {})
+    return bridge.addListener('onIntent', ({ token, action, args, deadline }) => {
+      void handler(action, args ?? {}, deadline)
         .catch((): IntentReply => ({ ok: false }))
         .then((reply) => {
           try {

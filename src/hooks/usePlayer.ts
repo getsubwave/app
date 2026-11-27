@@ -23,7 +23,7 @@ import type { StationApi } from '@/lib/api';
 import { SKIP_CUSHION_SECONDS } from '@/lib/idle-skip';
 import { IdleSkip } from '@/lib/idle-skip-playback';
 import { playbackEventLine, playbackLog } from '@/lib/playback-log';
-import { claimRemotePlay } from '@/lib/remote-play';
+import { claimRemotePlay, takeArrival } from '@/lib/remote-play';
 import { MAX_LEAD_SECONDS } from '@/lib/sessionFeed';
 import { streamBelongsTo } from '@/lib/station-store';
 import { StreamRecovery } from '@/lib/stream-recovery';
@@ -302,18 +302,32 @@ export function usePlayer(
   // RNTP level; drop local tuned-in state so the UI doesn't claim "on air"
   // over dead audio. (The event handler ignores State.None because reset()
   // also fires it mid tune-in and mid reconnect.)
-  // One exception: a switch from Siri, Shortcuts or Spotlight
-  // (src/intents/tune.ts) starts the new station's stream before the base
-  // changes here. A stream that already belongs to the new base is kept.
+  // Two exceptions, both a switch from Siri, Shortcuts or Spotlight
+  // (src/intents/tune.ts). With this player mounted, the intent asks for a
+  // tune-in on the new station, which goes through StreamRecovery in place of
+  // the stop: its load replaces the old item, so nothing is torn down under
+  // it. With none mounted, the intent started the new stream itself before
+  // the base changed here, and a stream that already belongs to the new base
+  // is kept.
   const prevBaseRef = useRef(api?.base ?? null);
   useEffect(() => {
     const nextBase = api?.base ?? null;
     if (prevBaseRef.current === nextBase) return;
     prevBaseRef.current = nextBase;
+    const recovery = recoveryRef.current;
+    if (nextBase && recovery && takeArrival(nextBase)) {
+      plog('intent station switch: tuning in on the new station');
+      endIdleSkip();
+      tunedInRef.current = true;
+      setTunedIn(true);
+      setStatus('connecting');
+      recovery.tuneIn('remote');
+      return;
+    }
     const meta = getLastLiveMeta();
     const adopted = !!(nextBase && meta && streamBelongsTo(meta.url, nextBase));
     if (tunedInRef.current && !adopted) stop();
-  }, [api, stop]);
+  }, [api, stop, endIdleSkip]);
 
   const prevFormatRef = useRef(streamFormat);
   useEffect(() => {
