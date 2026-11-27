@@ -14,8 +14,11 @@ import {
   setLeadTrimMs,
 } from '../src/lib/heard-track.ts';
 import {
+  likeHeard,
   likeReply,
   likeTarget,
+  likeUnconfirmedReply,
+  slowReply,
   whatsPlayingReply,
   type OnAirSnapshot,
 } from '../src/intents/on-air-reply.ts';
@@ -118,4 +121,71 @@ test('POST /like’s answer is said back, refusals in the station’s own words'
   });
   assert.equal(likeReply('SUB/WAVE', live, {}).ok, false);
   assert.equal(likeReply('SUB/WAVE', live, null).ok, false);
+});
+
+/** A like against a station whose reads answer `snapshot` and whose POST
+ *  /like answers `liked`; `null` for either never answers. The deadline's
+ *  timer fires at once only when `late`. */
+function liking(o: {
+  snapshot?: OnAirSnapshot | null;
+  liked?: Parameters<typeof likeReply>[2] | 'never';
+  late?: boolean;
+}) {
+  const calls: string[] = [];
+  const signals: AbortSignal[] = [];
+  const announced: string[] = [];
+  return {
+    calls,
+    signals,
+    announced,
+    run: () =>
+      likeHeard({
+        station: 'SUB/WAVE',
+        snapshot: (signal) => {
+          signals.push(signal);
+          const s = o.snapshot === undefined ? snap() : o.snapshot;
+          return s ? Promise.resolve(s) : new Promise(() => {});
+        },
+        like: (songId) => {
+          calls.push(songId);
+          return o.liked === 'never'
+            ? new Promise(() => {})
+            : Promise.resolve(o.liked === undefined ? { ok: true, count: 3 } : o.liked);
+        },
+        announce: (like) => announced.push(like.songId),
+        deadline: 10_000,
+        now: () => 0,
+        timer: () => (o.late ? Promise.resolve() : new Promise(() => {})),
+      }),
+  };
+}
+
+test('a like in time is liked, and the heart follows', async () => {
+  const l = liking({});
+  assert.deepEqual(await l.run(), { ok: true, message: 'Liked Teardrop by Massive Attack.' });
+  assert.deepEqual(l.calls, ['tear']);
+  assert.deepEqual(l.announced, ['tear']);
+});
+
+test('a station too slow to say what’s on gets no like, and its reads are stopped', async () => {
+  const l = liking({ snapshot: null, late: true });
+  assert.deepEqual(await l.run(), slowReply('SUB/WAVE'));
+  assert.deepEqual(l.calls, []);
+  assert.equal(l.signals[0]?.aborted, true);
+});
+
+test('a like still unanswered at the deadline is a failure, to be asked again', async () => {
+  // A repeat like counts once (alreadyLiked), so "ask again" is safe; saying
+  // "liked" for one that never landed would lose it.
+  const l = liking({ liked: 'never', late: true });
+  const reply = await l.run();
+  assert.deepEqual(reply, likeUnconfirmedReply('SUB/WAVE'));
+  assert.equal(reply.ok, false);
+  assert.deepEqual(l.announced, []);
+});
+
+test('a refused like is said in the station’s words, and the heart stays as it was', async () => {
+  const l = liking({ liked: { ok: false, error: 'Likes are off' } });
+  assert.deepEqual(await l.run(), { ok: false, message: 'Likes are off.' });
+  assert.deepEqual(l.announced, []);
 });

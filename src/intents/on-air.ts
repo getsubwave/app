@@ -9,16 +9,15 @@ import { heardTrack, leadMsFrom, leadTrimMs, listenerLeadMs } from '@/lib/heard-
 import { announceLike } from '@/lib/like-events';
 import type { StationApi } from '@/lib/api';
 import {
-  likeReply,
-  likeTarget,
+  likeHeard,
   whatsPlayingReply,
   type OnAirSnapshot,
   type OnAirTrack,
 } from './on-air-reply';
 import type { IntentStation } from './station';
 
-async function snapshot(api: StationApi): Promise<OnAirSnapshot> {
-  const [npRes, stateRes] = await Promise.allSettled([api.nowPlaying(), api.state()]);
+async function snapshot(api: StationApi, signal?: AbortSignal): Promise<OnAirSnapshot> {
+  const [npRes, stateRes] = await Promise.allSettled([api.nowPlaying(signal), api.state(signal)]);
   if (npRes.status !== 'fulfilled') return { reachable: false, online: false, track: null };
   const np = npRes.value;
   const live: OnAirTrack | null = np.nowPlaying;
@@ -50,14 +49,12 @@ export async function whatsPlaying(station: IntentStation): Promise<IntentReply>
   return whatsPlayingReply(stationName(station), await snapshot(station.api));
 }
 
-export async function likeHeardTrack(station: IntentStation): Promise<IntentReply> {
-  const name = stationName(station);
-  const snap = await snapshot(station.api);
-  const target = likeTarget(name, snap);
-  if (!('songId' in target)) return target;
-  const result = await station.api.likeCurrent(target.songId);
-  if (result && !result.error && (result.ok || result.alreadyLiked)) {
-    announceLike({ songId: target.songId, count: result.count });
-  }
-  return likeReply(name, snap.track ?? {}, result);
+export function likeHeardTrack(station: IntentStation, deadline: number): Promise<IntentReply> {
+  return likeHeard({
+    station: stationName(station),
+    snapshot: (signal) => snapshot(station.api, signal),
+    like: (songId) => station.api.likeCurrent(songId),
+    announce: announceLike,
+    deadline,
+  });
 }

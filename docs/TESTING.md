@@ -427,7 +427,9 @@ What is easy to get wrong:
   didn't respond for work that went through, and the listener asks again.
   The bridge sends its deadline with each request and JS cuts every wait to it
   (`src/intents/deadline.ts`): the tune-in's wait for audio and the card, the
-  song request's POST and polling.
+  song request's POST and polling, the like's reads and `POST /like`. A request
+  still out at the deadline is said as sent, since a repeat queues it twice; a
+  like is said as unconfirmed, since a repeat counts once.
 - **ActivityKit refuses a background app.** `liveactivitiesd` logs "Requester
   is not foreground" and the card never appears, though the audio plays.
   Inside a `LiveActivityIntent`'s run the request is allowed, which is why

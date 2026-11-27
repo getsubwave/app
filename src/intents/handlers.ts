@@ -25,7 +25,7 @@ export function registerIntentHandlers(): void {
         if (!station) return { ok: false, message: NO_STATION_MESSAGE };
         if (action === 'request') return askForSong(args.text ?? '', { api: station.api, deadline });
         if (action === 'nowPlaying') return whatsPlaying(station);
-        return likeHeardTrack(station);
+        return likeHeardTrack(station, deadline);
       }
       default:
         return { ok: false, message: 'Update SUB/WAVE to use this.' };
