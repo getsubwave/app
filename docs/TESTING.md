@@ -95,6 +95,16 @@ and progress must also be checked in the car.
   Raise the pin alongside an Expo SDK upgrade that moves compileSdk/AGP, and
   ship it in a binary for both platforms, because the plugin options are in the
   shared app config, so the pin is in the iOS fingerprint too.
+- **The idle skip leans on RNTP's rate** (`src/lib/idle-skip-playback.ts`, #9).
+  Tuning in to a woken station plays most of its silent connect burst at 8x
+  through `TrackPlayer.setRate`, measured on the media clock. AVFoundation
+  honours 8x on a live progressive MP3 even though `canPlayFastForward` is
+  false (macOS probe: 17 s of burst in 2.2 s on one connection). RNTP keeps its
+  rate across loads on both platforms, so `loadAndPlay` puts it back to 1x
+  first: drop that and a reload plays music at 8x. Device check: let a station
+  idle (no listeners) for over a minute, tune in, and music should start about
+  8 s after Playing instead of 22 s. The playback log shows `idle skip: … shed
+  N s`.
 
 ---
 
