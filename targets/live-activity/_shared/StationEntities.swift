@@ -14,6 +14,11 @@ import Foundation
 // App target only, like SubwaveShortcuts.swift.
 #if canImport(ExpoModulesCore)
 
+/// Posted in-process by the app-intents module's setStations after it writes
+/// a new list. Matched by STRING with
+/// modules/app-intents/ios/SubwaveAppIntentsModule.swift.
+let savedStationsChanged = Notification.Name("SubwaveStationsChanged")
+
 /// The stations as the app last wrote them. The key is matched by STRING with
 /// modules/app-intents/ios/SubwaveAppIntentsModule.swift.
 struct SavedStations: Decodable {

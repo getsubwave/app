@@ -82,6 +82,7 @@
           "backgroundColor": "#100e0c"
         }
       ],
+      "./plugins/withCarPlay",
       [
         "expo-build-properties",
         {

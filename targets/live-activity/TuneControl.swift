@@ -40,6 +40,6 @@ private struct OnAirProvider: ControlValueProvider {
   var previewValue: Bool { false }
 
   func currentValue() async throws -> Bool {
-    UserDefaults(suiteName: subwaveAppGroup)?.bool(forKey: "subwave.onAir") ?? false
+    OnAirFlag.isOn
   }
 }
